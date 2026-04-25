@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# JobScope
 
-## Getting Started
+AI-powered job aggregator. Upload a resume → get ranked matches across 7 free job APIs → track applications → daily digest emails.
 
-First, run the development server:
+**Stack:** Next.js 16 (App Router, Turbopack) · React 19 · TypeScript · Tailwind v4 · Better Auth · MongoDB Atlas · Cloudflare R2 · Gemini Flash + Groq · Resend · Vercel.
+
+## Features
+
+- Email/password + Google OAuth (Better Auth, MongoDB-native)
+- Resume upload (PDF/DOCX) → R2 → text extract → Gemini-parsed JSON with PII redaction
+- 7 job adapters: Remotive, Arbeitnow, The Muse, USAJobs, Adzuna, Jooble, JSearch
+- Daily cron pulls + dedupes + skill-enriches every 24h
+- Match scoring (skills 50 / seniority 20 / location 15 / experience 10 / recency 5)
+- Dashboard with filters, search, ScoreDonut visualization
+- Job detail with breakdown radial + AI helpers (cover letter streaming, skill gap, interview prep)
+- Application Kanban (`@dnd-kit`) with drag-persist
+- Daily digest emails (React Email) with min-score threshold
+- Settings: profile, preferences, account deletion (cascading)
+- Dark mode, OWASP headers, rate limiting in proxy
+
+## Local setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env  # fill in the keys
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000>.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Required env vars
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+See `lib/env.ts` for the full Zod schema. Get free keys from:
 
-## Learn More
+| Service | Where |
+| ------- | ----- |
+| MongoDB Atlas M0 | <https://cloud.mongodb.com> |
+| Google OAuth | <https://console.cloud.google.com/apis/credentials> |
+| Gemini API | <https://aistudio.google.com/apikey> |
+| Groq | <https://console.groq.com/keys> |
+| Adzuna | <https://developer.adzuna.com> |
+| Jooble | <https://jooble.org/api/about> |
+| RapidAPI (JSearch) | <https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch> |
+| Resend | <https://resend.com/api-keys> |
+| Cloudflare R2 | <https://dash.cloudflare.com> |
 
-To learn more about Next.js, take a look at the following resources:
+Generate `AUTH_SECRET` and `CRON_SECRET` with `openssl rand -hex 32`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Script | What |
+| ------ | ---- |
+| `pnpm dev` | Turbopack dev server |
+| `pnpm build` | Production build |
+| `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm lint` | Biome lint |
+| `pnpm lint:fix` | Auto-fix |
+| `pnpm test` | Vitest |
+| `pnpm fetch-jobs` | Trigger ingestion locally |
+| `pnpm send-alerts` | Trigger digest locally |
 
-## Deploy on Vercel
+## Deploy to Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Push to GitHub, import in Vercel.
+2. Add all env vars from `lib/env.ts`.
+3. In MongoDB Atlas, allowlist `0.0.0.0/0` (or Vercel's egress IPs).
+4. In Google Cloud Console add `https://<your-domain>/api/auth/callback/google` to OAuth redirect URIs.
+5. Verify the Resend sending domain.
+6. Crons in `vercel.json` run automatically (21:30 UTC fetch, 03:30 UTC alerts ≈ 9am IST).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Architecture
+
+```
+app/
+  (auth)/            login, signup, verify, forgot-password
+  (app)/             dashboard, jobs/[id], resumes, applications, settings  (auth-gated)
+  api/
+    auth/[...all]    Better Auth handler
+    cron/            fetch-jobs, send-alerts (Bearer CRON_SECRET)
+    ai/              cover-letter (stream), skill-gap, interview-prep
+lib/
+  auth.ts            Better Auth config
+  db.ts              Mongoose + native MongoClient share connection
+  r2.ts              S3 client targeting R2
+  llm/               gemini, groq, redact
+  resume/            extract (pdf-parse + mammoth), parse, ats
+  jobs/              7 adapters, dedupe, enrich, types
+  match/score.ts     50/20/15/10/5 scoring
+  email/             React Email digest template
+models/              Mongoose schemas: Resume, Job, Application, Match
+proxy.ts             Auth gate + per-IP API rate limit (60/min)
+```
+
+## Security
+
+- Passwords hashed by Better Auth (scrypt).
+- Email verification required before sign-in.
+- All resume uploads validated (MIME + 5MB cap).
+- PII redacted before any LLM call (`lib/llm/redact.ts`).
+- Rate limit on `/api/*` (60/IP/min) and AI endpoints (10/user/min).
+- Strict CSP-friendly security headers in `next.config.ts`.
+- TTL index on `Job.fetchedAt` purges stale jobs after 45 days.
+- Account delete cascades through Resume/Application/Match + R2 objects + auth tables.
+
+## Acknowledgements
+
+JobScope leans on the generous free tiers of MongoDB Atlas, Cloudflare R2, Vercel, Gemini, Groq, Resend, and the public job APIs above. Always free for users.
