@@ -22,7 +22,7 @@ export default async function ResumesPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Resumes</h1>
         <p className="text-sm text-[var(--color-fg-muted)]">
-          Upload as many as you want. Mark one active to drive job matching.
+          Upload as many as you want. Mark multiple as active to match different job types.
         </p>
       </div>
 

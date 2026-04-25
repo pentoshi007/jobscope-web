@@ -7,7 +7,7 @@ export async function loadJobAndResume(userId: string, jobId: string) {
   await connectMongoose();
   const [job, resume] = await Promise.all([
     Job.findById(jobId).lean(),
-    Resume.findOne({ userId, isActive: true, deletedAt: null }).lean(),
+    Resume.findOne({ userId, isActive: true, deletedAt: null }).sort({ createdAt: -1 }).lean(),
   ]);
   if (!job || !resume) return null;
 

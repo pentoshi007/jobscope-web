@@ -42,13 +42,18 @@ export async function GET(req: NextRequest) {
         return;
       }
       const userId = String(u.id ?? u._id);
-      const resume = await Resume.findOne({ userId, isActive: true, deletedAt: null }).lean();
-      if (!resume) {
+      const resumes = await Resume.find({ userId, isActive: true, deletedAt: null }).lean();
+      if (resumes.length === 0) {
         skipped++;
         return;
       }
       const ranked = recent
-        .map((j) => ({ j, m: score(resume.parsed as never, j as never, { preferredLocations: prefs.preferredLocations }) }))
+        .map((j) => {
+          const matches = resumes.map((r) =>
+            score(r.parsed as never, j as never, { preferredLocations: prefs.preferredLocations }),
+          );
+          return { j, m: matches.reduce((a, b) => (a.score >= b.score ? a : b)) };
+        })
         .filter(({ m }) => m.score >= prefs.minMatchScore)
         .sort((a, b) => b.m.score - a.m.score)
         .slice(0, 5);

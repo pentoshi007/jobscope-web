@@ -69,11 +69,12 @@ export async function uploadResume(formData: FormData): Promise<UploadResult> {
   return { ok: true, id: String(doc._id) };
 }
 
-export async function setActiveResume(id: string) {
+export async function toggleActiveResume(id: string) {
   const userId = await requireUserId();
   await connectMongoose();
-  await Resume.updateMany({ userId, deletedAt: null }, { $set: { isActive: false } });
-  await Resume.updateOne({ _id: id, userId }, { $set: { isActive: true } });
+  const doc = await Resume.findOne({ _id: id, userId, deletedAt: null });
+  if (!doc) return;
+  await Resume.updateOne({ _id: id, userId }, { $set: { isActive: !doc.isActive } });
   revalidatePath("/resumes");
   revalidatePath("/dashboard");
 }

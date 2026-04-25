@@ -22,12 +22,18 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   const job = await Job.findById(id).lean();
   if (!job) notFound();
 
-  const resume = await Resume.findOne({
+  const resumes = await Resume.find({
     userId: session.user.id,
     isActive: true,
     deletedAt: null,
   }).lean();
-  const m = score(resume?.parsed as never, job as never);
+
+  // Score against all active resumes, pick the best match
+  const matches = resumes.map((r) => score(r.parsed as never, job as never));
+  const m = matches.length > 0
+    ? matches.reduce((a, b) => (a.score >= b.score ? a : b))
+    : score(undefined as never, job as never);
+  const resume = resumes.length > 0 ? resumes[0] : null;
 
   const application = await Application.findOne({ userId: session.user.id, jobId: job._id }).lean();
   const salary = formatSalary(

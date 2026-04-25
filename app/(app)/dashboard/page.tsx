@@ -20,13 +20,15 @@ export default async function DashboardPage({
   const session = await requireSession();
   const sp = await searchParams;
   await connectMongoose();
-  const activeResume = await Resume.findOne({
+  const activeResumes = await Resume.find({
     userId: session.user.id,
     isActive: true,
     deletedAt: null,
-  }).lean();
+  })
+    .sort({ createdAt: -1 })
+    .lean();
 
-  if (!activeResume) {
+  if (activeResumes.length === 0) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-16">
         <Card>
@@ -37,7 +39,7 @@ export default async function DashboardPage({
             <div>
               <h2 className="text-xl font-semibold tracking-tight">Upload a resume to begin</h2>
               <p className="mx-auto mt-1 max-w-md text-sm text-[var(--color-fg-muted)]">
-                JobScope ranks jobs against your active resume. Upload a PDF or DOCX and we'll parse
+                JobScope ranks jobs against your active resumes. Upload a PDF or DOCX and we'll parse
                 skills, experience, and seniority in a few seconds.
               </p>
             </div>
@@ -52,6 +54,8 @@ export default async function DashboardPage({
     );
   }
 
+  const resumeNames = activeResumes.map((r) => r.name).join(", ");
+
   return (
     <div className="space-y-5 px-4 py-6 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -59,7 +63,9 @@ export default async function DashboardPage({
           <h1 className="text-2xl font-semibold tracking-tight">Your matches</h1>
           <p className="text-sm text-[var(--color-fg-muted)]">
             Ranked against{" "}
-            <span className="font-medium text-[var(--color-fg)]">{activeResume.name}</span>
+            <span className="font-medium text-[var(--color-fg)]">
+              {activeResumes.length === 1 ? resumeNames : `${activeResumes.length} active resumes`}
+            </span>
           </p>
         </div>
         <DashboardFilters />
@@ -67,7 +73,7 @@ export default async function DashboardPage({
       <Suspense fallback={<JobFeedSkeleton />}>
         <JobFeed
           userId={session.user.id}
-          resumeId={String(activeResume._id)}
+          resumeIds={activeResumes.map((r) => String(r._id))}
           searchParams={sp}
         />
       </Suspense>

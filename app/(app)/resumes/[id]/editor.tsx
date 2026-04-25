@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { setActiveResume, deleteResume, updateParsedResume } from "../actions";
+import { toggleActiveResume, deleteResume, updateParsedResume } from "../actions";
 import type { ParsedResume } from "@/lib/resume/schema";
 
 export function ResumeEditor({
@@ -36,10 +36,10 @@ export function ResumeEditor({
     });
   }
 
-  function makeActive() {
+  function toggleActive() {
     startTransition(async () => {
-      await setActiveResume(id);
-      toast.success("Set as active");
+      await toggleActiveResume(id);
+      toast.success(isActive ? "Deactivated" : "Set as active");
       router.refresh();
     });
   }
@@ -346,11 +346,10 @@ export function ResumeEditor({
             <Button className="w-full" variant="accent" onClick={save} disabled={pending}>
               Save changes
             </Button>
-            {!isActive && (
-              <Button className="w-full" variant="outline" onClick={makeActive} disabled={pending}>
-                <Star className="h-4 w-4" /> Make active
-              </Button>
-            )}
+            <Button className="w-full" variant={isActive ? "outline" : "outline"} onClick={toggleActive} disabled={pending}>
+              <Star className={`h-4 w-4 ${isActive ? "fill-[var(--color-accent)] text-[var(--color-accent)]" : ""}`} />
+              {isActive ? "Deactivate" : "Make active"}
+            </Button>
             <Button
               className="w-full"
               variant="ghost"

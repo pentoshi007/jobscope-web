@@ -7,16 +7,16 @@ import { JobCard } from "@/components/app/job-card";
 
 export async function JobFeed({
   userId,
-  resumeId,
+  resumeIds,
   searchParams,
 }: {
   userId: string;
-  resumeId: string;
+  resumeIds: string[];
   searchParams: Record<string, string | string[] | undefined>;
 }) {
   await connectMongoose();
-  const resume = await Resume.findById(resumeId).lean();
-  if (!resume) return null;
+  const resumes = await Resume.find({ _id: { $in: resumeIds }, userId }).lean();
+  if (resumes.length === 0) return null;
 
   const q = (searchParams.q as string | undefined)?.trim();
   const remote = searchParams.remote === "1";
@@ -39,8 +39,13 @@ export async function JobFeed({
     );
   }
 
+  // Score each job against ALL active resumes, pick the best match
   const scored = jobs
-    .map((j) => ({ job: j, m: score(resume.parsed as never, j as never) }))
+    .map((j) => {
+      const matches = resumes.map((r) => score(r.parsed as never, j as never));
+      const best = matches.reduce((a, b) => (a.score >= b.score ? a : b));
+      return { job: j, m: best };
+    })
     .sort((a, b) => b.m.score - a.m.score);
 
   return (
@@ -55,7 +60,7 @@ export async function JobFeed({
         </Link>
       ))}
       <p className="pt-2 text-center text-xs text-[var(--color-fg-subtle)]">
-        Showing {scored.length} jobs · ranked by match score
+        Showing {scored.length} jobs · ranked by best match across {resumes.length} resume{resumes.length > 1 ? "s" : ""}
       </p>
     </div>
   );
