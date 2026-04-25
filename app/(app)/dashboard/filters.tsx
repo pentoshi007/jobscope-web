@@ -1,7 +1,7 @@
 "use client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Search, Loader2 } from "lucide-react";
+import { useState, useEffect, useTransition, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -10,14 +10,23 @@ export function DashboardFilters() {
   const pathname = usePathname();
   const sp = useSearchParams();
   const [q, setQ] = useState(sp.get("q") ?? "");
-  const remote = sp.get("remote") === "1";
+  const [isPending, startTransition] = useTransition();
+
+  const navigate = useCallback(
+    (params: URLSearchParams) => {
+      startTransition(() => {
+        router.replace(`${pathname}?${params.toString()}`);
+      });
+    },
+    [router, pathname],
+  );
 
   useEffect(() => {
     const t = setTimeout(() => {
       const params = new URLSearchParams(sp);
       if (q) params.set("q", q);
       else params.delete("q");
-      router.replace(`${pathname}?${params.toString()}`);
+      navigate(params);
     }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -27,8 +36,10 @@ export function DashboardFilters() {
     const params = new URLSearchParams(sp);
     if (params.get(key) === value) params.delete(key);
     else params.set(key, value);
-    router.replace(`${pathname}?${params.toString()}`);
+    navigate(params);
   }
+
+  const remote = sp.get("remote") === "1";
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -45,10 +56,14 @@ export function DashboardFilters() {
         size="sm"
         variant={remote ? "accent" : "outline"}
         onClick={() => toggle("remote", "1")}
+        className="relative"
       >
         Remote only
       </Button>
       <SeniorityFilter value={sp.get("seniority")} onToggle={(v) => toggle("seniority", v)} />
+      {isPending && (
+        <Loader2 className="h-4 w-4 animate-spin text-[var(--color-fg-muted)]" />
+      )}
     </div>
   );
 }
