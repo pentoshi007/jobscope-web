@@ -26,25 +26,25 @@ export function atsScore(parsed: ParsedResume, rawText: string) {
     length: 0,
   };
 
-  if (parsed.email) breakdown.contact += 10;
-  if (parsed.phone) breakdown.contact += 5;
-  if (parsed.location) breakdown.contact += 5;
+  if (parsed?.email) breakdown.contact += 10;
+  if (parsed?.phone) breakdown.contact += 5;
+  if (parsed?.location) breakdown.contact += 5;
 
   const totalSkills =
-    parsed.skills.languages.length +
-    parsed.skills.frameworks.length +
-    parsed.skills.tools.length +
-    parsed.skills.databases.length +
-    parsed.skills.cloud.length;
+    (parsed?.skills?.languages?.length ?? 0) +
+    (parsed?.skills?.frameworks?.length ?? 0) +
+    (parsed?.skills?.tools?.length ?? 0) +
+    (parsed?.skills?.databases?.length ?? 0) +
+    (parsed?.skills?.cloud?.length ?? 0);
   breakdown.skills = Math.min(25, totalSkills * 1.5);
 
   const lower = rawText.toLowerCase();
   const verbHits = ACTION_VERBS.filter((v) => lower.includes(v)).length;
   breakdown.actionVerbs = Math.min(20, verbHits * 2);
 
-  if (parsed.experience.length >= 2) breakdown.structure += 10;
-  if (parsed.education.length >= 1) breakdown.structure += 5;
-  if (parsed.summary.length > 50) breakdown.structure += 5;
+  if ((parsed?.experience?.length ?? 0) >= 2) breakdown.structure += 10;
+  if ((parsed?.education?.length ?? 0) >= 1) breakdown.structure += 5;
+  if ((parsed?.summary?.length ?? 0) > 50) breakdown.structure += 5;
 
   const wc = rawText.split(/\s+/).length;
   if (wc >= 250 && wc <= 1200) breakdown.length = 15;

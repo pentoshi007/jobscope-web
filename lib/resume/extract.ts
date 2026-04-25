@@ -1,7 +1,7 @@
 /**
  * Extract text from uploaded resume files (PDF or DOCX).
  *
- * PDF:  Uses pdf-parse v2 class-based API (PDFParse).
+ * PDF:  Uses `unpdf` — a serverless-compatible PDF text extractor (works on Vercel/Edge).
  * DOCX: Uses mammoth.convertToHtml() so hyperlink URLs are preserved,
  *       then strips HTML while keeping link targets inline.
  */
@@ -19,17 +19,13 @@ export async function extractText(buffer: Buffer, mimeType: string): Promise<str
 }
 
 /* ------------------------------------------------------------------ */
-/*  PDF — pdf-parse v2 (class-based API)                               */
+/*  PDF — unpdf (serverless-safe, no native deps)                      */
 /* ------------------------------------------------------------------ */
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  const { PDFParse } = await import("pdf-parse");
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
-  try {
-    const result = await parser.getText();
-    return result.text ?? "";
-  } finally {
-    await parser.destroy().catch(() => {});
-  }
+  const { extractText: extract, getDocumentProxy } = await import("unpdf");
+  const pdf = await getDocumentProxy(new Uint8Array(buffer));
+  const { text } = await extract(pdf, { mergePages: true });
+  return typeof text === "string" ? text : (text as string[]).join("\n");
 }
 
 /* ------------------------------------------------------------------ */

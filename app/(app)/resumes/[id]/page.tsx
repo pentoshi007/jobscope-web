@@ -6,6 +6,7 @@ import { Resume } from "@/models/resume";
 import { requireSession } from "@/lib/session";
 import { ResumeEditor } from "./editor";
 import { atsScore } from "@/lib/resume/ats";
+import { ParsedResumeSchema } from "@/lib/resume/schema";
 import { ScoreDonut } from "@/components/app/score-donut";
 import { Badge } from "@/components/ui/badge";
 
@@ -20,7 +21,9 @@ export default async function ResumeDetail({
   const r = await Resume.findOne({ _id: id, userId: session.user.id, deletedAt: null }).lean();
   if (!r) notFound();
 
-  const ats = atsScore(r.parsed as never, r.rawText ?? "");
+  // Normalize parsed through Zod schema to ensure all fields have safe defaults
+  const parsed = ParsedResumeSchema.parse(r.parsed ?? {});
+  const ats = atsScore(parsed, r.rawText ?? "");
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
@@ -54,7 +57,7 @@ export default async function ResumeDetail({
       <ResumeEditor
         id={String(r._id)}
         isActive={Boolean(r.isActive)}
-        parsed={r.parsed as never}
+        parsed={parsed}
       />
     </div>
   );
