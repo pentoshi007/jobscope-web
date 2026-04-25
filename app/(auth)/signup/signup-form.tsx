@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { GoogleIcon } from "@/components/brand/google-icon";
 
 export function SignupForm() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export function SignupForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
+  const [googlePending, setGooglePending] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,12 +35,20 @@ export function SignupForm() {
   }
 
   async function onGoogle() {
+    setGooglePending(true);
     await authClient.signIn.social({ provider: "google", callbackURL: "/dashboard" });
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <Button type="button" variant="outline" className="w-full" onClick={onGoogle}>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={onGoogle}
+        disabled={googlePending}
+      >
+        {googlePending ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
         Continue with Google
       </Button>
       <div className="relative my-3">

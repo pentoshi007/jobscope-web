@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   description:
     "Upload a resume, get the best job matches across Remotive, Adzuna, Jooble, The Muse and more. Free forever.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
   openGraph: { title: "JobScope", description: "AI-powered job aggregator", type: "website" },
 };
 

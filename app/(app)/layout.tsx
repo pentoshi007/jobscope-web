@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/app/sidebar";
+import { MobileNav } from "@/components/app/mobile-nav";
 import { UserMenu } from "@/components/app/user-menu";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { requireSession } from "@/lib/session";
@@ -10,11 +11,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 px-4 backdrop-blur sm:px-6">
-          <div className="text-sm text-[var(--color-fg-muted)]">
-            <span className="hidden sm:inline">Welcome back, </span>
-            <span className="font-medium text-[var(--color-fg)]">
-              {session.user.name ?? session.user.email}
-            </span>
+          <div className="flex min-w-0 items-center gap-2">
+            <MobileNav />
+            <div className="min-w-0 truncate text-sm text-[var(--color-fg-muted)]">
+              <span className="hidden sm:inline">Welcome back, </span>
+              <span className="font-medium text-[var(--color-fg)]">
+                {session.user.name ?? session.user.email}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />

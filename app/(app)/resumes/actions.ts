@@ -34,15 +34,21 @@ export async function uploadResume(formData: FormData): Promise<UploadResult> {
   let rawText = "";
   try {
     rawText = await extractText(buf, file.type);
+    console.log(`[resume] extractText OK — ${rawText.length} chars from ${file.type}`);
   } catch (e) {
-    console.error("extractText failed", e);
+    console.error("[resume] extractText FAILED for", file.type, e);
   }
 
   let parsed = undefined;
   try {
-    parsed = await parseResume(rawText);
+    if (rawText.length > 0) {
+      parsed = await parseResume(rawText);
+      console.log(`[resume] parseResume OK — name="${parsed.fullName}", exp=${parsed.experience.length}`);
+    } else {
+      console.warn("[resume] Skipping parseResume — rawText is empty");
+    }
   } catch (e) {
-    console.error("parseResume failed", e);
+    console.error("[resume] parseResume FAILED", e);
   }
 
   await connectMongoose();

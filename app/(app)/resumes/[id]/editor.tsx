@@ -2,7 +2,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Trash2, Star, X, Plus } from "lucide-react";
+import { Trash2, Star, X, Plus, ExternalLink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,6 +63,11 @@ export function ResumeEditor({
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <Field label="Full name" value={parsed.fullName} onChange={(v) => update("fullName", v)} />
+            <Field
+              label="Headline"
+              value={parsed.headline}
+              onChange={(v) => update("headline", v)}
+            />
             <Field label="Email" value={parsed.email} onChange={(v) => update("email", v)} />
             <Field label="Phone" value={parsed.phone} onChange={(v) => update("phone", v)} />
             <Field label="Location" value={parsed.location} onChange={(v) => update("location", v)} />
@@ -107,6 +112,44 @@ export function ResumeEditor({
 
         <Card>
           <CardHeader>
+            <CardTitle>Links</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {(["website", "linkedin", "github", "portfolio", "twitter"] as const).map((k) => (
+              <Field
+                key={k}
+                label={k[0].toUpperCase() + k.slice(1)}
+                value={parsed.links?.[k] ?? ""}
+                onChange={(v) =>
+                  update("links", { ...parsed.links, [k]: v })
+                }
+              />
+            ))}
+            {parsed.links?.other?.length > 0 && (
+              <div className="sm:col-span-2 space-y-1">
+                <Label>Other links</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {parsed.links.other.map((u, i) => (
+                    <a
+                      // biome-ignore lint/suspicious/noArrayIndexKey: stable list
+                      key={i}
+                      href={u}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 rounded-md bg-[var(--color-bg-subtle)] px-2 py-0.5 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+                    >
+                      {u}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Skills</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -132,19 +175,169 @@ export function ResumeEditor({
             {parsed.experience.map((e, i) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: stable list
               <div key={i} className="rounded-md border border-[var(--color-border)] p-3">
-                <div className="flex items-center justify-between text-sm">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-sm">
                   <span className="font-medium">
-                    {e.role} @ {e.company}
+                    {e.role}
+                    {e.company && <span className="text-[var(--color-fg-muted)]"> @ {e.company}</span>}
                   </span>
                   <span className="text-xs text-[var(--color-fg-muted)]">
-                    {e.startDate} – {e.endDate}
+                    {[e.startDate, e.endDate].filter(Boolean).join(" – ")}
+                    {e.location && ` · ${e.location}`}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-[var(--color-fg-muted)]">{e.description}</p>
+                {e.description && (
+                  <p className="mt-1 whitespace-pre-line text-xs text-[var(--color-fg-muted)]">
+                    {e.description}
+                  </p>
+                )}
+                {e.skills?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {e.skills.map((s, j) => (
+                      <Badge
+                        // biome-ignore lint/suspicious/noArrayIndexKey: stable
+                        key={`${s}-${j}`}
+                        variant="mono"
+                        className="text-[10px]"
+                      >
+                        {s}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Education</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {parsed.education.length === 0 && (
+              <p className="text-sm text-[var(--color-fg-muted)]">No entries.</p>
+            )}
+            {parsed.education.map((e, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: stable list
+              <div key={i} className="rounded-md border border-[var(--color-border)] p-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-sm">
+                  <span className="font-medium">{e.school || "—"}</span>
+                  <span className="text-xs text-[var(--color-fg-muted)]">
+                    {[e.startDate, e.endDate].filter(Boolean).join(" – ")}
+                    {e.location && ` · ${e.location}`}
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-[var(--color-fg-muted)]">
+                  {[e.degree, e.field].filter(Boolean).join(", ")}
+                  {e.gpa && <span> · GPA {e.gpa}</span>}
+                  {e.honors && <span> · {e.honors}</span>}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Projects</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {parsed.projects.length === 0 && (
+              <p className="text-sm text-[var(--color-fg-muted)]">No entries.</p>
+            )}
+            {parsed.projects.map((p, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: stable list
+              <div key={i} className="rounded-md border border-[var(--color-border)] p-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-sm">
+                  <span className="font-medium">{p.name || "—"}</span>
+                  {p.url && (
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline"
+                    >
+                      Open <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+                {p.description && (
+                  <p className="mt-1 whitespace-pre-line text-xs text-[var(--color-fg-muted)]">
+                    {p.description}
+                  </p>
+                )}
+                {p.skills?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {p.skills.map((s, j) => (
+                      <Badge
+                        // biome-ignore lint/suspicious/noArrayIndexKey: stable
+                        key={`${s}-${j}`}
+                        variant="mono"
+                        className="text-[10px]"
+                      >
+                        {s}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Certifications</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {parsed.certifications.length === 0 && (
+              <p className="text-sm text-[var(--color-fg-muted)]">No entries.</p>
+            )}
+            {parsed.certifications.map((c, i) => (
+              <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: stable list
+                key={i}
+                className="flex flex-wrap items-baseline justify-between gap-x-2 rounded-md border border-[var(--color-border)] p-3 text-sm"
+              >
+                <div>
+                  <div className="font-medium">{c.name || "—"}</div>
+                  {(c.issuer || c.date) && (
+                    <div className="text-xs text-[var(--color-fg-muted)]">
+                      {[c.issuer, c.date].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
+                </div>
+                {c.url && (
+                  <a
+                    href={c.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-[var(--color-accent)] hover:underline"
+                  >
+                    View <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {(parsed.achievements.length > 0 ||
+          parsed.awards.length > 0 ||
+          parsed.publications.length > 0 ||
+          parsed.languagesSpoken.length > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>More</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <ListBlock label="Achievements" items={parsed.achievements} />
+              <ListBlock label="Awards" items={parsed.awards} />
+              <ListBlock label="Publications" items={parsed.publications} />
+              <ListBlock label="Languages" items={parsed.languagesSpoken} inline />
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -169,6 +362,45 @@ export function ResumeEditor({
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function ListBlock({
+  label,
+  items,
+  inline = false,
+}: {
+  label: string;
+  items: string[];
+  inline?: boolean;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <div className="mb-1.5 text-xs font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
+        {label}
+      </div>
+      {inline ? (
+        <div className="flex flex-wrap gap-1.5">
+          {items.map((s, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: stable
+            <Badge key={`${s}-${i}`} variant="mono" className="text-[10px]">
+              {s}
+            </Badge>
+          ))}
+        </div>
+      ) : (
+        <ul className="space-y-1 text-sm text-[var(--color-fg-muted)]">
+          {items.map((s, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: stable
+            <li key={`${s}-${i}`} className="flex gap-2">
+              <span className="text-[var(--color-fg-subtle)]">•</span>
+              <span>{s}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

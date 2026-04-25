@@ -6,12 +6,12 @@ import {
   FileText,
   KanbanSquare,
   Settings,
-  Sparkles,
   Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/brand/logo";
 
-const NAV = [
+export const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/jobs", label: "Jobs", icon: Briefcase },
   { href: "/resumes", label: "Resumes", icon: FileText },
@@ -24,11 +24,8 @@ export function Sidebar() {
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-bg-subtle)] md:flex">
       <div className="flex h-14 items-center px-5">
-        <Link href="/dashboard" className="flex items-center gap-2 text-sm font-semibold">
-          <span className="grid h-6 w-6 place-items-center rounded bg-[var(--color-fg)] text-[var(--color-bg)]">
-            <Sparkles className="h-3.5 w-3.5" />
-          </span>
-          JobScope
+        <Link href="/dashboard">
+          <Logo size={24} />
         </Link>
       </div>
       <nav className="flex-1 space-y-0.5 px-3 py-2">

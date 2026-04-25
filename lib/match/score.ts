@@ -1,4 +1,4 @@
-import type { ParsedResume } from "../resume/schema";
+import { ParsedResumeSchema, type ParsedResume } from "../resume/schema";
 import type { JobDoc } from "@/models/job";
 import { isAdjacent } from "./seniority";
 import { locationsMatch } from "./location";
@@ -23,19 +23,7 @@ export function score(
   },
   prefs: { preferredLocations?: string[] } = {},
 ): MatchResult {
-  const safeResume: ParsedResume = resume ?? ({
-    skills: { languages: [], frameworks: [], tools: [], databases: [], cloud: [], soft: [] },
-    inferredSeniority: "mid",
-    totalYearsExperience: 0,
-    location: "",
-    experience: [],
-    education: [],
-    certifications: [],
-    fullName: "",
-    email: "",
-    phone: "",
-    summary: "",
-  } as ParsedResume);
+  const safeResume: ParsedResume = resume ?? ParsedResumeSchema.parse({});
 
   const resumeSkills = new Set(
     [

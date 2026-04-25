@@ -45,3 +45,9 @@ next-env.d.ts
 /playwright-report
 /test-results
 .vercel
+
+# AI / editor config
+CLAUDE.md
+AGENTS.md
+.cursor/
+.gemini/

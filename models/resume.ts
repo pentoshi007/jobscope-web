@@ -12,10 +12,23 @@ const ParsedSkillsSchema = new Schema(
   { _id: false },
 );
 
+const LinksSchema = new Schema(
+  {
+    website: { type: String, default: "" },
+    linkedin: { type: String, default: "" },
+    github: { type: String, default: "" },
+    portfolio: { type: String, default: "" },
+    twitter: { type: String, default: "" },
+    other: { type: [String], default: [] },
+  },
+  { _id: false },
+);
+
 const ExperienceSchema = new Schema(
   {
     company: String,
     role: String,
+    location: String,
     startDate: String,
     endDate: String,
     description: String,
@@ -29,8 +42,31 @@ const EducationSchema = new Schema(
     school: String,
     degree: String,
     field: String,
+    location: String,
     startDate: String,
     endDate: String,
+    gpa: String,
+    honors: String,
+  },
+  { _id: false },
+);
+
+const ProjectSchema = new Schema(
+  {
+    name: String,
+    description: String,
+    url: String,
+    skills: { type: [String], default: [] },
+  },
+  { _id: false },
+);
+
+const CertificationSchema = new Schema(
+  {
+    name: String,
+    issuer: String,
+    date: String,
+    url: String,
   },
   { _id: false },
 );
@@ -41,11 +77,18 @@ const ParsedSchema = new Schema(
     email: String,
     phone: String,
     location: String,
+    headline: String,
     summary: String,
+    links: { type: LinksSchema, default: () => ({}) },
     skills: { type: ParsedSkillsSchema, default: () => ({}) },
     experience: { type: [ExperienceSchema], default: [] },
     education: { type: [EducationSchema], default: [] },
-    certifications: { type: [String], default: [] },
+    projects: { type: [ProjectSchema], default: [] },
+    certifications: { type: [Schema.Types.Mixed], default: [] },
+    achievements: { type: [String], default: [] },
+    awards: { type: [String], default: [] },
+    publications: { type: [String], default: [] },
+    languagesSpoken: { type: [String], default: [] },
     totalYearsExperience: { type: Number, default: 0 },
     inferredSeniority: { type: String, enum: ["junior", "mid", "senior", "staff"], default: "mid" },
   },
