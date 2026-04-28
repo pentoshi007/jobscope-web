@@ -370,36 +370,37 @@ const StreamCard = memo(function StreamCard({ job }: { job: StreamJob }) {
   );
 
   return (
-    <Card className="flex min-w-0 items-start gap-3 p-3 transition-all hover:shadow-[var(--shadow-pop)] sm:items-center sm:gap-5 sm:p-5">
+    <Card className="flex min-w-0 overflow-hidden items-start gap-3 p-3 transition-all hover:shadow-[var(--shadow-pop)] sm:items-center sm:gap-5 sm:p-5">
       <div className="shrink-0">
-        <ScoreDonut value={job.match.score} size={48} />
+        <ScoreDonut value={job.match.score} size={44} />
       </div>
       <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <h3 className="min-w-0 max-w-full truncate text-sm font-semibold tracking-tight sm:text-base">
+        <div className="flex min-w-0 items-baseline gap-x-2 gap-y-0.5">
+          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight sm:text-base">
             {job.title}
           </h3>
-          <span className="hidden text-xs text-[var(--color-fg-subtle)] sm:inline">·</span>
           <span className="shrink-0 text-xs text-[var(--color-fg-muted)] sm:text-sm">
             {formatRelative(new Date(job.postedAt))}
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-fg-muted)]">
-          <span className="inline-flex min-w-0 items-center gap-1">
-            <Building2 className="h-3 w-3" /> {job.company}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-fg-muted)]">
+          <span className="inline-flex min-w-0 max-w-[40%] shrink items-center gap-1 sm:max-w-none">
+            <Building2 className="h-3 w-3 shrink-0" />
+            <span className="truncate">{job.company}</span>
           </span>
           {job.location && (
-            <span className="inline-flex min-w-0 items-center gap-1">
-              <MapPin className="h-3 w-3" /> {job.location}
+            <span className="inline-flex min-w-0 max-w-[45%] shrink items-center gap-1 sm:max-w-none">
+              <MapPin className="h-3 w-3 shrink-0" />
+              <span className="truncate">{job.location}</span>
             </span>
           )}
           {job.remote && (
-            <span className="inline-flex items-center gap-1 text-[var(--color-success)]">
+            <span className="inline-flex shrink-0 items-center gap-1 text-[var(--color-success)]">
               <Globe className="h-3 w-3" /> Remote
             </span>
           )}
-          {salary && <span className="font-mono">{salary}</span>}
-          <Badge variant="outline" className="capitalize">
+          {salary && <span className="shrink-0 font-mono">{salary}</span>}
+          <Badge variant="outline" className="shrink-0 capitalize">
             {job.source}
           </Badge>
         </div>
@@ -415,16 +416,13 @@ const StreamCard = memo(function StreamCard({ job }: { job: StreamJob }) {
             </Badge>
           ))}
         </div>
-        {(warnings.length > 0 || positives.length > 0 || neutrals.length > 0) && (
+        {(warnings.length > 0 || positives.length > 0) && (
           <div className="space-y-0.5 text-xs">
-            {warnings.map((r, i) => (
-              <p key={`w-${i}`} className="text-[var(--color-warning)]">⚠ {r}</p>
+            {warnings.slice(0, 1).map((r, i) => (
+              <p key={`w-${i}`} className="line-clamp-1 text-[var(--color-warning)]">⚠ {r}</p>
             ))}
-            {positives.map((r, i) => (
-              <p key={`p-${i}`} className="text-[var(--color-success)]">✓ {r}</p>
-            ))}
-            {neutrals.map((r, i) => (
-              <p key={`n-${i}`} className="text-[var(--color-fg-muted)]">• {r}</p>
+            {positives.slice(0, 1).map((r, i) => (
+              <p key={`p-${i}`} className="line-clamp-1 text-[var(--color-success)]">✓ {r}</p>
             ))}
           </div>
         )}
