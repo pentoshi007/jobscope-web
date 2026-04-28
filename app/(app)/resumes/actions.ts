@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { errorToLog, logAppEvent } from "@/lib/app-log";
 import { connectMongoose } from "@/lib/db";
+import { env } from "@/lib/env";
 import { buildPersonalizedQuery, fetchAndStorePersonalizedJobs } from "@/lib/jobs/personalized";
 import { buildAiJobSearchProfile } from "@/lib/jobs/search-profile";
 import { hasCountrySignal } from "@/lib/match/location";
@@ -146,7 +147,21 @@ export async function updateParsedResume(
     { _id: id, userId },
     { $set: { parsed: nextParsed, parsedAt: new Date() } },
   );
+  // Fetch cheap personalized jobs synchronously (fast, <5s).
   await fetchAndStorePersonalizedJobs(buildPersonalizedQuery([nextParsed]), { allowAdzuna: true });
+
+  // Fire-and-forget: run Apify LinkedIn scrape + send match email in background.
+  after(() => {
+    fetch(`${env.NEXT_PUBLIC_APP_URL}/api/jobs/trigger-user-refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-secret": env.CRON_SECRET,
+      },
+      body: JSON.stringify({ userId }),
+    }).catch(() => undefined);
+  });
+
   revalidatePath(`/resumes/${id}`);
   revalidatePath("/dashboard");
   revalidatePath("/jobs");

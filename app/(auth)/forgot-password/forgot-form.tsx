@@ -17,7 +17,7 @@ export function ForgotForm() {
     setPending(true);
     const res = await authClient.requestPasswordReset({
       email,
-      redirectTo: "/login",
+      redirectTo: `${window.location.origin}/reset-password`,
     });
     setPending(false);
     if (res.error) {

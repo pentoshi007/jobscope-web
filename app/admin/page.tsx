@@ -52,7 +52,24 @@ export default async function AdminPage({
       .toArray(),
     Resume.find({ deletedAt: null })
       .sort({ createdAt: -1 })
-      .select({ userId: 1, name: 1, fileKey: 1, fileName: 1, isActive: 1, createdAt: 1 })
+      .select({
+        userId: 1,
+        name: 1,
+        fileKey: 1,
+        fileName: 1,
+        isActive: 1,
+        createdAt: 1,
+        "parsed.fullName": 1,
+        "parsed.headline": 1,
+        "parsed.skills": 1,
+        "parsed.experience": 1,
+        "parsed.jobSearchProfile": 1,
+        "parsed.totalYearsExperience": 1,
+        "parsed.inferredSeniority": 1,
+        "parsed.certifications": 1,
+        "parsed.projects": 1,
+        "parsed.summary": 1,
+      })
       .lean(),
     Job.find({
       $or: [
