@@ -144,40 +144,41 @@ export function buildResumeJobProfile(resumes: ParsedResume[]): ResumeJobProfile
       );
     }
 
-    addTitle(titleScores, weightedTerms, resume.headline, hasStored ? 4 : 9);
+    addTitle(titleScores, weightedTerms, resume.headline ?? "", hasStored ? 4 : 9);
 
-    resume.experience.slice(0, 2).forEach((exp, index) => {
+    (resume.experience ?? []).slice(0, 2).forEach((exp, index) => {
       addTitle(titleScores, weightedTerms, exp.role, hasStored ? 3 : index === 0 ? 10 : 7);
       addTerms(weightedTerms, exp.description ?? "", index === 0 ? 1.4 : 0.9, "experience");
       addListTerms(weightedTerms, exp.skills ?? [], hasStored ? 2 : 5, "skill");
     });
 
-    resume.experience.slice(2, 5).forEach((exp) => {
+    (resume.experience ?? []).slice(2, 5).forEach((exp) => {
       addTitle(titleScores, weightedTerms, exp.role, hasStored ? 1 : 3);
       addTerms(weightedTerms, exp.description ?? "", 0.6, "experience");
     });
 
-    addTerms(weightedTerms, resume.summary, hasStored ? 0.8 : 2, "summary");
+    addTerms(weightedTerms, resume.summary ?? "", hasStored ? 0.8 : 2, "summary");
+    const sk = resume.skills ?? { languages: [], frameworks: [], tools: [], databases: [], cloud: [], soft: [] };
     addListTerms(
       weightedTerms,
       [
-        ...resume.skills.languages,
-        ...resume.skills.frameworks,
-        ...resume.skills.tools,
-        ...resume.skills.databases,
-        ...resume.skills.cloud,
-        ...resume.skills.soft,
+        ...(sk.languages ?? []),
+        ...(sk.frameworks ?? []),
+        ...(sk.tools ?? []),
+        ...(sk.databases ?? []),
+        ...(sk.cloud ?? []),
+        ...(sk.soft ?? []),
       ],
       hasStored ? 1.6 : 4,
       "skill",
     );
     addListTerms(
       weightedTerms,
-      resume.certifications.map((cert) => cert.name),
+      (resume.certifications ?? []).map((cert) => cert.name),
       hasStored ? 5 : 6,
       "certification",
     );
-    for (const project of resume.projects.slice(0, 4)) {
+    for (const project of (resume.projects ?? []).slice(0, 4)) {
       addTerms(
         weightedTerms,
         `${project.name} ${project.description} ${(project.skills ?? []).join(" ")}`,
