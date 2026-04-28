@@ -1,19 +1,19 @@
+import { ArrowLeft, Building2, ExternalLink, MapPin } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink, ArrowLeft, Building2, MapPin } from "lucide-react";
+import { ScoreDonut } from "@/components/app/score-donut";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { connectMongoose } from "@/lib/db";
-import { Job } from "@/models/job";
-import { Resume } from "@/models/resume";
-import { Application } from "@/models/application";
 import { score } from "@/lib/match/score";
 import { requireSession } from "@/lib/session";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ScoreDonut } from "@/components/app/score-donut";
-import { JobActions } from "./job-actions";
-import { AIHelpers } from "./ai-helpers";
 import { formatRelative, formatSalary } from "@/lib/utils";
+import { Application } from "@/models/application";
+import { Job } from "@/models/job";
+import { Resume } from "@/models/resume";
+import { AIHelpers } from "./ai-helpers";
+import { JobActions } from "./job-actions";
 
 export default async function JobDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -30,9 +30,10 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
 
   // Score against all active resumes, pick the best match
   const matches = resumes.map((r) => score(r.parsed as never, job as never));
-  const m = matches.length > 0
-    ? matches.reduce((a, b) => (a.score >= b.score ? a : b))
-    : score(undefined as never, job as never);
+  const m =
+    matches.length > 0
+      ? matches.reduce((a, b) => (a.score >= b.score ? a : b))
+      : score(undefined as never, job as never);
   const resume = resumes.length > 0 ? resumes[0] : null;
 
   const application = await Application.findOne({ userId: session.user.id, jobId: job._id }).lean();
@@ -110,7 +111,24 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             </CardHeader>
             <CardContent className="space-y-3">
               {Object.entries(m.breakdown).map(([k, v]) => (
-                <Bar key={k} label={k} value={v} max={k === "skills" ? 50 : k === "seniority" ? 20 : k === "location" ? 15 : k === "experience" ? 10 : 5} />
+                <Bar
+                  key={k}
+                  label={k}
+                  value={v}
+                  max={
+                    k === "skills"
+                      ? 40
+                      : k === "title"
+                        ? 25
+                        : k === "seniority"
+                          ? 12
+                          : k === "location"
+                            ? 10
+                            : k === "experience"
+                              ? 8
+                              : 5
+                  }
+                />
               ))}
             </CardContent>
           </Card>

@@ -1,4 +1,5 @@
-import { type JobAdapter, type NormalizedJob, inferSeniority, stripHtml } from "../types";
+import { env } from "../../env";
+import { inferSeniority, type JobAdapter, type NormalizedJob, stripHtml } from "../types";
 
 interface USAJob {
   MatchedObjectId: string;
@@ -10,23 +11,38 @@ interface USAJob {
     PublicationStartDate: string;
     ApplicationCloseDate: string;
     UserArea: { Details: { JobSummary?: string } };
-    PositionRemuneration: { MinimumRange: string; MaximumRange: string; RateIntervalCode: string }[];
+    PositionRemuneration: {
+      MinimumRange: string;
+      MaximumRange: string;
+      RateIntervalCode: string;
+    }[];
   };
 }
 
 export const usajobsAdapter: JobAdapter = {
   source: "usajobs",
   async fetch() {
+    const apiKey = env.USAJOBS_API_KEY;
+    const userAgent = env.USAJOBS_USER_AGENT;
+    if (!apiKey || !userAgent) {
+      console.info("[cron] usajobs skipped — USAJOBS_API_KEY/USAJOBS_USER_AGENT not set");
+      return [];
+    }
     const r = await fetch(
       "https://data.usajobs.gov/api/search?Keyword=engineer&ResultsPerPage=200",
       {
         headers: {
           Host: "data.usajobs.gov",
-          "User-Agent": "jobscope@example.com",
+          "User-Agent": userAgent,
+          "Authorization-Key": apiKey,
         },
         signal: AbortSignal.timeout(15000),
       },
     );
+    if (r.status === 401 || r.status === 403) {
+      console.warn("[cron] usajobs auth rejected — check USAJOBS_API_KEY/USAJOBS_USER_AGENT");
+      return [];
+    }
     if (!r.ok) throw new Error(`USAJobs ${r.status}`);
     const j = (await r.json()) as { SearchResult: { SearchResultItems: USAJob[] } };
     return j.SearchResult?.SearchResultItems ?? [];

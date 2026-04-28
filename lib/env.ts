@@ -15,6 +15,8 @@ const schema = z.object({
   ADZUNA_APP_KEY: z.string().min(1),
   JOOBLE_API_KEY: z.string().min(1),
   RAPIDAPI_KEY: z.string().min(1),
+  USAJOBS_API_KEY: z.string().optional(),
+  USAJOBS_USER_AGENT: z.string().optional(),
 
   RESEND_API_KEY: z.string().min(1),
   EMAIL_FROM: z.string().email(),

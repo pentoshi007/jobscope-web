@@ -1,10 +1,10 @@
-import { MapPin, Building2, Globe } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { Building2, Globe, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { ScoreDonut } from "./score-donut";
+import { Card } from "@/components/ui/card";
+import type { MatchResult } from "@/lib/match/score";
 import { formatRelative, formatSalary } from "@/lib/utils";
 import type { JobDoc } from "@/models/job";
-import type { MatchResult } from "@/lib/match/score";
+import { ScoreDonut } from "./score-donut";
 
 export function JobCard({ job, match }: { job: JobDoc; match: MatchResult }) {
   const salary = formatSalary(
@@ -17,13 +17,17 @@ export function JobCard({ job, match }: { job: JobDoc; match: MatchResult }) {
   const missing = match.missingSkills.slice(0, 3);
 
   return (
-    <Card className="flex items-center gap-5 p-5 transition-all hover:shadow-[var(--shadow-pop)]">
-      <ScoreDonut value={match.score} size={56} />
-      <div className="min-w-0 flex-1 space-y-2">
+    <Card className="flex items-center gap-3 p-3 transition-all hover:shadow-[var(--shadow-pop)] sm:gap-5 sm:p-5">
+      <div className="shrink-0">
+        <ScoreDonut value={match.score} size={48} />
+      </div>
+      <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <h3 className="truncate text-base font-semibold tracking-tight">{job.title}</h3>
-          <span className="text-xs text-[var(--color-fg-subtle)]">·</span>
-          <span className="text-sm text-[var(--color-fg-muted)]">
+          <h3 className="min-w-0 max-w-full truncate text-sm font-semibold tracking-tight sm:text-base">
+            {job.title}
+          </h3>
+          <span className="hidden text-xs text-[var(--color-fg-subtle)] sm:inline">·</span>
+          <span className="text-xs text-[var(--color-fg-muted)] sm:text-sm">
             {formatRelative(job.postedAt)}
           </span>
         </div>

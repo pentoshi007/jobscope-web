@@ -25,8 +25,8 @@ export function ResumeUploader() {
         toast.error(res.error);
         return;
       }
-      toast.success("Resume parsed");
-      router.push(`/resumes/${res.id}`);
+      toast.success("Resume parsed · finding matches");
+      router.push("/dashboard?refresh=1");
     });
   }
 

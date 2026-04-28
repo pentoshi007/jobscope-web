@@ -1,14 +1,12 @@
-import { Suspense } from "react";
-import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { JobFeed } from "./job-feed";
-import { JobFeedSkeleton } from "./job-feed-skeleton";
-import { DashboardFilters } from "./filters";
 import { connectMongoose } from "@/lib/db";
-import { Resume } from "@/models/resume";
 import { requireSession } from "@/lib/session";
+import { Resume } from "@/models/resume";
+import { DashboardFilters } from "./filters";
+import { StreamingFeed } from "./streaming-feed";
 
 export const metadata = { title: "Dashboard" };
 
@@ -30,7 +28,7 @@ export default async function DashboardPage({
 
   if (activeResumes.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-16">
+      <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
         <Card>
           <CardContent className="space-y-5 py-10 text-center">
             <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
@@ -39,8 +37,8 @@ export default async function DashboardPage({
             <div>
               <h2 className="text-xl font-semibold tracking-tight">Upload a resume to begin</h2>
               <p className="mx-auto mt-1 max-w-md text-sm text-[var(--color-fg-muted)]">
-                JobScope ranks jobs against your active resumes. Upload a PDF or DOCX and we'll parse
-                skills, experience, and seniority in a few seconds.
+                JobScope ranks jobs against your active resumes. Upload a PDF or DOCX and we'll
+                parse skills, experience, and seniority in a few seconds.
               </p>
             </div>
             <Button variant="accent" asChild>
@@ -55,6 +53,8 @@ export default async function DashboardPage({
   }
 
   const resumeNames = activeResumes.map((r) => r.name).join(", ");
+  // sp is read here so the page revalidates when filters change.
+  void sp;
 
   return (
     <div className="space-y-5 px-4 py-6 sm:px-6">
@@ -70,13 +70,7 @@ export default async function DashboardPage({
         </div>
         <DashboardFilters />
       </div>
-      <Suspense fallback={<JobFeedSkeleton />}>
-        <JobFeed
-          userId={session.user.id}
-          resumeIds={activeResumes.map((r) => String(r._id))}
-          searchParams={sp}
-        />
-      </Suspense>
+      <StreamingFeed />
     </div>
   );
 }

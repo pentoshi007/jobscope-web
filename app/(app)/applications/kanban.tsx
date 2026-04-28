@@ -1,19 +1,19 @@
 "use client";
-import { useState, useTransition } from "react";
 import {
   DndContext,
   type DragEndEvent,
   PointerSensor,
-  useSensor,
-  useSensors,
   useDraggable,
   useDroppable,
+  useSensor,
+  useSensors,
 } from "@dnd-kit/core";
 import { ExternalLink, GripVertical } from "lucide-react";
 import { motion } from "motion/react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { updateApplicationStatus, removeApplication } from "./actions";
 import { Badge } from "@/components/ui/badge";
+import { removeApplication, updateApplicationStatus } from "./actions";
 
 type Status = "saved" | "applied" | "interview" | "offer" | "rejected";
 const COLUMNS: { id: Status; label: string }[] = [
@@ -67,7 +67,7 @@ export function KanbanBoard({ initial }: { initial: Card[] }) {
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-      <div className="grid gap-3 overflow-x-auto sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
         {COLUMNS.map((col) => {
           const items = cards.filter((c) => c.status === col.id);
           return (
@@ -107,7 +107,7 @@ function Column({
   return (
     <div
       ref={setNodeRef}
-      className={`min-h-[300px] rounded-[var(--radius-card)] border bg-[var(--color-bg-subtle)] p-3 transition-colors ${
+      className={`min-h-[200px] sm:min-h-[300px] rounded-[var(--radius-card)] border bg-[var(--color-bg-subtle)] p-3 transition-colors ${
         isOver ? "border-[var(--color-accent)]" : "border-[var(--color-border)]"
       }`}
     >
@@ -123,7 +123,9 @@ function Column({
 }
 
 function DraggableCard({ card, onRemove }: { card: Card; onRemove: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: card.id });
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: card.id,
+  });
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;

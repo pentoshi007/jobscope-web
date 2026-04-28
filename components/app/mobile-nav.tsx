@@ -1,11 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Logo } from "@/components/brand/logo";
+import { useEffect, useState } from "react";
 import { NAV } from "@/components/app/sidebar";
+import { Logo } from "@/components/brand/logo";
+import { cn } from "@/lib/utils";
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
@@ -37,13 +37,13 @@ export function MobileNav() {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-[60] md:hidden">
           <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setOpen(false)}
             aria-hidden
           />
-          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-[var(--color-border)] bg-[var(--color-bg-subtle)] shadow-xl">
+          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-[var(--color-border)] bg-[var(--color-bg)] shadow-xl">
             <div className="flex h-14 items-center justify-between px-5">
               <Link href="/dashboard" onClick={() => setOpen(false)}>
                 <Logo size={24} />

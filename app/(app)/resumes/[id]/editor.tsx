@@ -1,16 +1,16 @@
 "use client";
-import { useState, useTransition } from "react";
+import { ExternalLink, Plus, Star, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Trash2, Star, X, Plus, ExternalLink } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { toggleActiveResume, deleteResume, updateParsedResume } from "../actions";
 import type { ParsedResume } from "@/lib/resume/schema";
+import { deleteResume, toggleActiveResume, updateParsedResume } from "../actions";
 
 export function ResumeEditor({
   id,
@@ -37,10 +37,12 @@ export function ResumeEditor({
   }
 
   function toggleActive() {
+    const willActivate = !isActive;
     startTransition(async () => {
       await toggleActiveResume(id);
-      toast.success(isActive ? "Deactivated" : "Set as active");
-      router.refresh();
+      toast.success(willActivate ? "Active · finding matches" : "Deactivated");
+      if (willActivate) router.push("/dashboard?refresh=1");
+      else router.refresh();
     });
   }
 
@@ -56,13 +58,17 @@ export function ResumeEditor({
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      <div className="space-y-6 lg:col-span-2">
+      <div className="order-2 space-y-6 lg:order-1 lg:col-span-2">
         <Card>
           <CardHeader>
             <CardTitle>Profile</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
-            <Field label="Full name" value={parsed.fullName} onChange={(v) => update("fullName", v)} />
+            <Field
+              label="Full name"
+              value={parsed.fullName}
+              onChange={(v) => update("fullName", v)}
+            />
             <Field
               label="Headline"
               value={parsed.headline}
@@ -70,7 +76,11 @@ export function ResumeEditor({
             />
             <Field label="Email" value={parsed.email} onChange={(v) => update("email", v)} />
             <Field label="Phone" value={parsed.phone} onChange={(v) => update("phone", v)} />
-            <Field label="Location" value={parsed.location} onChange={(v) => update("location", v)} />
+            <Field
+              label="Location"
+              value={parsed.location}
+              onChange={(v) => update("location", v)}
+            />
             <div className="sm:col-span-2 space-y-1">
               <Label htmlFor="summary">Summary</Label>
               <Textarea
@@ -86,9 +96,7 @@ export function ResumeEditor({
                 type="number"
                 min={0}
                 value={parsed.totalYearsExperience}
-                onChange={(e) =>
-                  update("totalYearsExperience", Number(e.target.value) || 0)
-                }
+                onChange={(e) => update("totalYearsExperience", Number(e.target.value) || 0)}
               />
             </div>
             <div className="space-y-1">
@@ -120,9 +128,7 @@ export function ResumeEditor({
                 key={k}
                 label={k[0].toUpperCase() + k.slice(1)}
                 value={parsed.links?.[k] ?? ""}
-                onChange={(v) =>
-                  update("links", { ...parsed.links, [k]: v })
-                }
+                onChange={(v) => update("links", { ...parsed.links, [k]: v })}
               />
             ))}
             {parsed.links?.other?.length > 0 && (
@@ -178,7 +184,9 @@ export function ResumeEditor({
                 <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-sm">
                   <span className="font-medium">
                     {e.role}
-                    {e.company && <span className="text-[var(--color-fg-muted)]"> @ {e.company}</span>}
+                    {e.company && (
+                      <span className="text-[var(--color-fg-muted)]"> @ {e.company}</span>
+                    )}
                   </span>
                   <span className="text-xs text-[var(--color-fg-muted)]">
                     {[e.startDate, e.endDate].filter(Boolean).join(" – ")}
@@ -340,22 +348,24 @@ export function ResumeEditor({
         )}
       </div>
 
-      <div className="space-y-3">
+      <div className="order-1 space-y-3 lg:order-2 lg:sticky lg:top-20">
         <Card>
           <CardContent className="space-y-3 p-5">
             <Button className="w-full" variant="accent" onClick={save} disabled={pending}>
               Save changes
             </Button>
-            <Button className="w-full" variant={isActive ? "outline" : "outline"} onClick={toggleActive} disabled={pending}>
-              <Star className={`h-4 w-4 ${isActive ? "fill-[var(--color-accent)] text-[var(--color-accent)]" : ""}`} />
-              {isActive ? "Deactivate" : "Make active"}
-            </Button>
             <Button
               className="w-full"
-              variant="ghost"
-              onClick={remove}
+              variant={isActive ? "outline" : "outline"}
+              onClick={toggleActive}
               disabled={pending}
             >
+              <Star
+                className={`h-4 w-4 ${isActive ? "fill-[var(--color-accent)] text-[var(--color-accent)]" : ""}`}
+              />
+              {isActive ? "Deactivate" : "Make active"}
+            </Button>
+            <Button className="w-full" variant="ghost" onClick={remove} disabled={pending}>
               <Trash2 className="h-4 w-4" /> Delete
             </Button>
           </CardContent>

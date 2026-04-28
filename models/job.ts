@@ -33,7 +33,7 @@ const JobSchema = new Schema(
     },
     category: { type: String, default: "" },
     tags: { type: [String], default: [] },
-    fetchedAt: { type: Date, default: Date.now, index: true },
+    fetchedAt: { type: Date, default: Date.now },
   },
   { timestamps: true },
 );

@@ -1,9 +1,9 @@
 "use client";
+import { Loader2, Search } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search, Loader2 } from "lucide-react";
-import { useState, useEffect, useTransition, useCallback } from "react";
-import { Input } from "@/components/ui/input";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function DashboardFilters() {
   const router = useRouter();
@@ -42,12 +42,12 @@ export function DashboardFilters() {
   const remote = sp.get("remote") === "1";
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative">
+    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+      <div className="relative w-full sm:w-auto">
         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-[var(--color-fg-subtle)]" />
         <Input
           placeholder="Search title, company..."
-          className="h-9 w-64 pl-8"
+          className="h-9 w-full pl-8 sm:w-64"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -61,9 +61,7 @@ export function DashboardFilters() {
         Remote only
       </Button>
       <SeniorityFilter value={sp.get("seniority")} onToggle={(v) => toggle("seniority", v)} />
-      {isPending && (
-        <Loader2 className="h-4 w-4 animate-spin text-[var(--color-fg-muted)]" />
-      )}
+      {isPending && <Loader2 className="h-4 w-4 animate-spin text-[var(--color-fg-muted)]" />}
     </div>
   );
 }

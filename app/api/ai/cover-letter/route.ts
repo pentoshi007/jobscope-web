@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { requireUserId } from "@/lib/session";
 import { loadJobAndResume } from "@/lib/ai/context";
-import { geminiFlashText } from "@/lib/llm/gemini";
+import { geminiText } from "@/lib/llm/gemini";
+import { groqText } from "@/lib/llm/groq";
 import { rateLimit } from "@/lib/rate-limit";
+import { requireUserId } from "@/lib/session";
 
 export const maxDuration = 30;
 
@@ -16,7 +17,8 @@ export async function POST(req: NextRequest) {
     );
   }
   const { jobId } = (await req.json()) as { jobId?: string };
-  if (!jobId) return NextResponse.json({ ok: false, error: { code: "BAD_REQUEST" } }, { status: 400 });
+  if (!jobId)
+    return NextResponse.json({ ok: false, error: { code: "BAD_REQUEST" } }, { status: 400 });
 
   const ctx = await loadJobAndResume(userId, jobId);
   if (!ctx)
@@ -33,32 +35,24 @@ ${ctx.redactedResume}
 JOB:
 ${ctx.jobBlock}`;
 
+  let text = "";
   try {
-    const model = geminiFlashText();
-    const stream = await model.generateContentStream(prompt);
-    const encoder = new TextEncoder();
-    const rs = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of stream.stream) {
-            const t = chunk.text();
-            if (t) controller.enqueue(encoder.encode(t));
-          }
-        } catch (e) {
-          controller.enqueue(encoder.encode(`\n\n[Error: ${e instanceof Error ? e.message : "stream"}]`));
-        } finally {
-          controller.close();
-        }
-      },
-    });
-    return new Response(rs, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
-  } catch (e) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: { code: "AI_FAILED", message: e instanceof Error ? e.message : "AI failed" },
-      },
-      { status: 500 },
-    );
+    text = await geminiText(prompt);
+  } catch {
+    try {
+      text = await groqText(
+        "You write tailored, honest, concise cover letters in plain text.",
+        prompt,
+      );
+    } catch (e) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: { code: "AI_FAILED", message: e instanceof Error ? e.message : "AI failed" },
+        },
+        { status: 500 },
+      );
+    }
   }
+  return NextResponse.json({ ok: true, data: text });
 }
