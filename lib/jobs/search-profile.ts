@@ -32,10 +32,12 @@ Rules:
 - Infer the candidate's dominant job track from headline, summary, recent roles, years of experience, certifications, and repeated project/work evidence.
 - Skills that appear only once, old work, side projects, or "also familiar with" items are supporting, not primary.
 - targetTitles must all belong to the primaryRole family. Do not put internships or unrelated secondary tracks in targetTitles unless the primaryRole itself is an internship track.
-- If the resume spans multiple tracks, rank them. Put the strongest track in primaryRole and targetTitles. Put credible but secondary tracks only in secondaryTitles.
-- Put roles that would distract job search in avoidTitles. Do not put adjacent variants of the primary role in avoidTitles; for example, if primaryRole is Full-Stack Developer, frontend/backend/web/software roles are adjacent, not filtered out.
+- If the resume spans multiple tracks, rank them. Put the strongest track in primaryRole and targetTitles.
+- Put credible adjacent or transferable tracks in secondaryTitles when there is evidence from role history, projects, certifications, tools, portfolio work, or repeated domain skills. Secondary titles should be eligible for search, but less important than targetTitles.
+- Use roleFamilies to express strength across tracks: primary family near 90-100, credible adjacent tracks around 35-75, weak/background-only tracks below 35.
+- Put roles that would distract job search in avoidTitles. Do not put adjacent variants, component roles, specializations, or evidenced secondary tracks in avoidTitles.
 - requiredSkills must be evidenced by the resume and important for the primaryRole. Put less certain or secondary-track skills in preferredSkills/supportingSkills.
-- Build searchQueries as 3 to 5 short phrases that job APIs can search directly. Prefer role/domain phrases over raw skills.
+- Build searchQueries as 3 to 6 short phrases that job APIs can search directly. Include the strongest target roles first, then one or two credible secondary-role searches.
 - keywords should support filtering and ranking. Include domain-specific tools and skills, not generic words.
 - negativeKeywords should include terms that commonly cause bad matches for the primaryRole.
 - Work for any profession, including cybersecurity, finance, design, video editing, sales, healthcare, legal, education, and software.
@@ -67,121 +69,43 @@ ${JSON.stringify(compact)}`;
 }
 
 export function buildHeuristicJobSearchProfile(resume: ParsedResume): JobSearchProfile {
-  const text = compactText([
-    resume.headline,
-    resume.summary,
-    ...resume.experience.slice(0, 4).flatMap((e) => [e.role, e.description]),
-    ...resume.projects.slice(0, 4).flatMap((p) => [p.name, p.description]),
-    ...allResumeSkills(resume),
-    ...resume.certifications.map((c) => c.name),
-  ]);
-
   const recentTitles = unique(
     [resume.headline, ...resume.experience.slice(0, 3).map((e) => e.role)]
       .map(cleanTitle)
       .filter(Boolean),
   );
-
-  const cyber = countHits(
-    text,
-    /\b(cyber ?security|information security|soc|siem|threat|incident response|vulnerability|penetration|pentest|owasp|burp|nmap|wireshark|metasploit|splunk|rbac|iam|security analyst)\b/g,
+  const olderTitles = unique(
+    resume.experience
+      .slice(3, 8)
+      .map((e) => cleanTitle(e.role))
+      .filter(Boolean),
   );
-  const web = countHits(
-    text,
-    /\b(full stack|frontend|front end|backend|back end|react|node\.?js|next\.?js|django|flask|web developer)\b/g,
-  );
-  const data = countHits(
-    text,
-    /\b(data analyst|data scientist|analytics|sql|tableau|power bi|pandas|numpy|machine learning)\b/g,
-  );
-  const finance = countHits(
-    text,
-    /\b(finance|financial|accounting|audit|tax|valuation|excel|quickbooks|bookkeeping)\b/g,
-  );
-  const video = countHits(
-    text,
-    /\b(video editor|video editing|premiere pro|after effects|davinci|final cut|motion graphics|color grading)\b/g,
-  );
-
-  let primaryRole = recentTitles[0] || "General Professional";
-  let targetTitles = recentTitles.slice(0, 4);
-  let secondaryTitles: string[] = [];
-  let avoidTitles: string[] = [];
-  let requiredSkills = topSkills(resume, 6);
-  let preferredSkills = topSkills(resume, 12).slice(6);
-
-  if (cyber >= Math.max(2, web)) {
-    primaryRole = titleCase(
-      recentTitles.find((title) => /security|cyber|soc/i.test(title)) || "Cybersecurity Analyst",
-    );
-    targetTitles = unique([
-      primaryRole,
-      "Cybersecurity Analyst",
-      "Security Analyst",
-      "SOC Analyst",
-      "Information Security Analyst",
-      "Application Security Analyst",
-    ]);
-    if (web > 0) {
-      secondaryTitles = ["Web Developer", "Full Stack Developer"];
-      avoidTitles = [
-        "Full Stack Developer",
-        "Frontend Developer",
-        "Backend Developer",
-        "Web Developer",
-      ];
-    }
-    requiredSkills = unique([
-      "cybersecurity",
-      "security analysis",
-      "vulnerability assessment",
-      "incident response",
-      "network security",
-      ...topSkills(resume, 6),
-    ]).slice(0, 8);
-    preferredSkills = unique([
-      "python",
-      "linux",
-      "bash",
-      "sql",
-      "iam",
-      "rbac",
-      ...topSkills(resume, 12),
-    ]).slice(0, 10);
-  } else if (data >= 3) {
-    primaryRole = titleCase(
-      recentTitles.find((title) => /data|analytics/i.test(title)) || "Data Analyst",
-    );
-    targetTitles = unique([primaryRole, "Data Analyst", "Business Analyst", "Analytics Analyst"]);
-  } else if (finance >= 3) {
-    primaryRole = titleCase(
-      recentTitles.find((title) => /financ|account|audit/i.test(title)) || "Financial Analyst",
-    );
-    targetTitles = unique([
-      primaryRole,
-      "Financial Analyst",
-      "Finance Analyst",
-      "Accounting Analyst",
-    ]);
-  } else if (video >= 2) {
-    primaryRole = titleCase(
-      recentTitles.find((title) => /video|editor|motion/i.test(title)) || "Video Editor",
-    );
-    targetTitles = unique([
-      primaryRole,
-      "Video Editor",
-      "Motion Graphics Editor",
-      "Content Editor",
-    ]);
-  } else if (web >= 2) {
-    primaryRole = titleCase(
-      recentTitles.find((title) => /full|frontend|backend|web|developer|engineer/i.test(title)) ||
-        "Full Stack Developer",
-    );
-    targetTitles = unique([primaryRole, ...recentTitles, "Software Engineer"]).slice(0, 6);
-  }
-
-  const searchQueries = unique(targetTitles.slice(0, 5)).map(titleCase);
+  const primaryRole = recentTitles[0] || cleanTitle(resume.headline) || "General Professional";
+  const targetTitles = unique([
+    primaryRole,
+    ...recentTitles.filter((title) => compatibleTitle(primaryRole, title)),
+  ]).slice(0, 6);
+  const top = topSkills(resume, 18);
+  const skillDerivedTitles = top
+    .slice(0, 5)
+    .map((skill) => secondaryTitleFromSkill(skill, primaryRole))
+    .filter(Boolean);
+  const secondaryTitles = unique([
+    ...recentTitles.filter((title) => !compatibleTitle(primaryRole, title)),
+    ...olderTitles.filter((title) => !compatibleTitle(primaryRole, title)),
+    ...skillDerivedTitles,
+  ])
+    .filter((title) => normalizeComparable(title) !== normalizeComparable(primaryRole))
+    .slice(0, 8);
+  const requiredSkills = top.slice(0, 8);
+  const preferredSkills = top.slice(8, 16);
+  const searchQueries = unique([
+    primaryRole,
+    ...targetTitles.slice(1, 3),
+    ...secondaryTitles.slice(0, 2),
+  ])
+    .slice(0, 6)
+    .map(titleCase);
   const profile = {
     primaryRole: titleCase(primaryRole),
     profileSummary: summarize(resume),
@@ -193,19 +117,24 @@ export function buildHeuristicJobSearchProfile(resume: ParsedResume): JobSearchP
       },
       ...secondaryTitles.slice(0, 2).map((title) => ({
         label: titleCase(title),
-        priority: 40,
-        reason: "Mentioned as a secondary capability.",
+        priority: 45,
+        reason: "Evidenced as an adjacent or secondary capability.",
       })),
     ],
     targetTitles: targetTitles.map(titleCase),
     secondaryTitles: secondaryTitles.map(titleCase),
-    avoidTitles: avoidTitles.map(titleCase),
+    avoidTitles: [],
     requiredSkills,
     preferredSkills,
-    supportingSkills: topSkills(resume, 18).slice(12),
+    supportingSkills: top.slice(16),
     searchQueries,
-    keywords: unique([...targetTitles, ...requiredSkills, ...preferredSkills]).slice(0, 18),
-    negativeKeywords: avoidTitles,
+    keywords: unique([
+      ...targetTitles,
+      ...secondaryTitles,
+      ...requiredSkills,
+      ...preferredSkills,
+    ]).slice(0, 18),
+    negativeKeywords: [],
     source: "heuristic" as const,
     builtAt: new Date().toISOString(),
   };
@@ -291,10 +220,11 @@ function normalizeProfile(raw: unknown, source: JobSearchProfile["source"], resu
     searchQueries: unique([
       ...(cleanList(profile.searchQueries).length
         ? cleanList(profile.searchQueries)
-        : targetTitles),
+        : [...targetTitles, ...secondaryTitles.slice(0, 2)]),
       primaryRole,
+      ...secondaryTitles.slice(0, 2),
     ])
-      .filter((query) => compatibleTitle(primaryRole, query))
+      .filter((query) => !avoidTitles.some((title) => compatibleTitle(title, query)))
       .slice(0, 5)
       .map(titleCase),
     keywords: unique([...cleanList(profile.keywords), ...requiredSkills, ...preferredSkills]).slice(
@@ -337,14 +267,6 @@ function topSkills(resume: ParsedResume, limit: number) {
     .slice(0, limit);
 }
 
-function countHits(text: string, re: RegExp) {
-  return text.match(re)?.length ?? 0;
-}
-
-function compactText(values: Array<string | null | undefined>) {
-  return values.filter(Boolean).join(" ").toLowerCase();
-}
-
 function cleanList(values: Array<string | null | undefined>) {
   return unique(values.map((value) => cleanTitle(value ?? "")).filter(Boolean));
 }
@@ -365,9 +287,7 @@ function compatibleTitle(primary: string, candidate: string) {
   const overlap = c.filter((token) => p.includes(token)).length;
   if (overlap / Math.min(p.length, c.length) >= 0.45) return true;
 
-  const primarySoftware = p.some((token) => SOFTWARE_FAMILY.has(token));
-  const candidateSoftware = c.some((token) => SOFTWARE_FAMILY.has(token));
-  if (primarySoftware && candidateSoftware) return true;
+  if (roleHeadsCompatible(roleHead(primary), roleHead(candidate))) return true;
 
   return false;
 }
@@ -382,10 +302,13 @@ function adjacentToPrimary(primary: string, candidate: string, targetTitles: str
 const ROLE_HEADS = new Set([
   "developer",
   "engineer",
+  "programmer",
   "analyst",
   "manager",
   "designer",
   "editor",
+  "artist",
+  "producer",
   "consultant",
   "specialist",
   "administrator",
@@ -394,23 +317,11 @@ const ROLE_HEADS = new Set([
   "associate",
 ]);
 
-const SOFTWARE_FAMILY = new Set([
-  "software",
-  "developer",
-  "engineer",
-  "programmer",
-  "full",
-  "stack",
-  "frontend",
-  "backend",
-  "front",
-  "back",
-  "web",
-  "react",
-  "node",
-  "javascript",
-  "typescript",
-]);
+const ROLE_HEAD_GROUPS = [
+  new Set(["developer", "engineer", "programmer", "architect"]),
+  new Set(["analyst", "specialist", "consultant", "associate"]),
+  new Set(["designer", "editor", "artist", "producer"]),
+];
 
 const TITLE_STOP = new Set([
   "junior",
@@ -435,6 +346,12 @@ function meaningfulTokens(value: string) {
 
 function roleHead(value: string) {
   return meaningfulTokens(value).find((token) => ROLE_HEADS.has(token)) ?? "";
+}
+
+function roleHeadsCompatible(a: string, b: string) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return ROLE_HEAD_GROUPS.some((group) => group.has(a) && group.has(b));
 }
 
 function normalizeComparable(value: string) {
@@ -478,6 +395,13 @@ function looksLikeRole(value: string) {
   return /\b(developer|engineer|analyst|manager|designer|editor|consultant|specialist|administrator|architect)\b/i.test(
     value,
   );
+}
+
+function secondaryTitleFromSkill(skill: string, primaryRole: string) {
+  const head = roleHead(primaryRole);
+  const clean = cleanTitle(skill);
+  if (!head || !clean || clean.length < 3 || looksLikeRole(clean)) return "";
+  return `${clean} ${head}`;
 }
 
 function titleCase(value: string) {

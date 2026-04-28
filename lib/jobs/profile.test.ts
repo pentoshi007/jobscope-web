@@ -106,6 +106,123 @@ describe("resume job profile matching", () => {
     expect(profile.titles).not.toContain("cybersecurity intern");
   });
 
+  it("allows evidenced secondary software roles but ranks the primary role higher", () => {
+    const resume = ParsedResumeSchema.parse({
+      headline: "Full Stack MERN Developer",
+      location: "Bengaluru, India",
+      totalYearsExperience: 2,
+      inferredSeniority: "mid",
+      skills: {
+        languages: ["JavaScript", "TypeScript"],
+        frameworks: ["React", "Node.js", "Express.js"],
+        tools: [],
+        databases: ["MongoDB"],
+        cloud: [],
+        soft: [],
+      },
+      jobSearchProfile: {
+        primaryRole: "Full Stack Developer",
+        targetTitles: ["Full Stack Developer", "MERN Stack Developer"],
+        secondaryTitles: ["React Developer", "Node.js Developer"],
+        requiredSkills: ["JavaScript", "TypeScript", "React", "Node.js"],
+        preferredSkills: ["Express.js", "MongoDB"],
+        supportingSkills: [],
+        searchQueries: ["Full Stack Developer", "React Developer", "Node.js Developer"],
+        source: "ai",
+      },
+    });
+    const profile = buildResumeJobProfile([resume]);
+    const fullStackJob = {
+      title: "Full Stack Developer",
+      description: "Build React and Node.js applications with MongoDB.",
+      extractedSkills: ["javascript", "typescript", "react", "node.js", "mongodb"],
+      seniority: "mid" as const,
+      location: "Bengaluru, India",
+      remote: false,
+      postedAt: new Date(),
+    };
+    const reactJob = {
+      title: "React Developer",
+      description: "Build TypeScript React interfaces and consume Node.js APIs.",
+      extractedSkills: ["typescript", "react", "javascript"],
+      seniority: "mid" as const,
+      location: "Bengaluru, India",
+      remote: false,
+      postedAt: new Date(),
+    };
+
+    expect(jobMatchesProfile(profile, reactJob)).toBe(true);
+    expect(score(resume, reactJob, { roleProfile: profile }).score).toBeLessThan(
+      score(resume, fullStackJob, { roleProfile: profile }).score,
+    );
+  });
+
+  it("allows evidenced secondary cybersecurity tracks at a lower score", () => {
+    const resume = ParsedResumeSchema.parse({
+      headline: "SOC Analyst L1",
+      location: "Chicago, IL, United States",
+      totalYearsExperience: 2,
+      inferredSeniority: "mid",
+      skills: {
+        languages: ["Python"],
+        frameworks: [],
+        tools: ["Splunk", "Burp Suite", "Nmap"],
+        databases: [],
+        cloud: [],
+        soft: [],
+      },
+      experience: [
+        {
+          role: "SOC Analyst L1",
+          company: "SecureCo",
+          description: "Monitored SIEM alerts and performed vulnerability assessment.",
+          skills: ["soc monitoring", "incident response", "vulnerability assessment"],
+        },
+      ],
+      projects: [
+        {
+          name: "Penetration testing lab",
+          description: "Practiced web application penetration testing with Burp Suite and Nmap.",
+          skills: ["penetration testing", "burp suite", "nmap"],
+        },
+      ],
+      jobSearchProfile: {
+        primaryRole: "SOC Analyst",
+        targetTitles: ["SOC Analyst", "Security Analyst"],
+        secondaryTitles: ["Penetration Tester", "Vulnerability Assessment Analyst"],
+        requiredSkills: ["siem", "incident response", "soc monitoring"],
+        preferredSkills: ["vulnerability assessment", "python"],
+        supportingSkills: ["penetration testing", "burp suite", "nmap"],
+        searchQueries: ["SOC Analyst", "Penetration Tester"],
+        source: "ai",
+      },
+    });
+    const profile = buildResumeJobProfile([resume]);
+    const socJob = {
+      title: "SOC Analyst",
+      description: "Monitor SIEM alerts and respond to incidents.",
+      extractedSkills: ["siem", "incident response", "soc monitoring"],
+      seniority: "mid" as const,
+      location: "Chicago, IL",
+      remote: false,
+      postedAt: new Date(),
+    };
+    const pentestJob = {
+      title: "Penetration Tester",
+      description: "Test web applications with Burp Suite, Nmap, and vulnerability assessment.",
+      extractedSkills: ["penetration testing", "burp suite", "nmap"],
+      seniority: "mid" as const,
+      location: "Chicago, IL",
+      remote: false,
+      postedAt: new Date(),
+    };
+
+    expect(jobMatchesProfile(profile, pentestJob)).toBe(true);
+    expect(score(resume, pentestJob, { roleProfile: profile }).score).toBeLessThan(
+      score(resume, socJob, { roleProfile: profile }).score,
+    );
+  });
+
   it("caps non-remote jobs in a different country and explains why", () => {
     const resume = ParsedResumeSchema.parse({
       headline: "Data Analyst",

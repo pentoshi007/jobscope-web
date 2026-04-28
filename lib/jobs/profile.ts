@@ -128,7 +128,7 @@ export function buildResumeJobProfile(resumes: ParsedResume[]): ResumeJobProfile
       addTitle(titleScores, weightedTerms, stored.primaryRole, 28);
       for (const title of targetTitles) addTitle(titleScores, weightedTerms, title, 22);
       for (const title of secondaryTitles) {
-        addSecondaryTitle(secondaryScores, weightedTerms, title, 8);
+        addSecondaryTitle(secondaryScores, weightedTerms, title, 12);
       }
       for (const title of avoidTitles) addAvoidTitle(avoidScores, title);
       addListTerms(weightedTerms, stored.requiredSkills, 9, "skill");
@@ -264,7 +264,7 @@ export function jobMatchesProfile(
   const fit = roleFitDetails(profile, job);
   if (fit.avoidTitleMatch && !fit.strongTitleMatch) return false;
   if (fit.strongTitleMatch) return fit.score >= 12;
-  if (fit.secondaryOnly) return fit.score >= 24;
+  if (fit.secondaryOnly) return fit.score >= 18 && fit.evidenceCount >= 1;
   return fit.score >= 18 && fit.evidenceCount >= 2;
 }
 
@@ -352,11 +352,11 @@ export function roleFitDetails(
   for (const candidateTitle of profile.secondaryTitles.slice(0, 6)) {
     if (candidateTitle.length <= 3) continue;
     if (phraseMatch(title, candidateTitle)) {
-      fit += 10;
+      fit += 22;
       evidenceCount += 1;
       secondaryOnly = !strongTitleMatch;
     } else if (phraseMatch(body, candidateTitle)) {
-      fit += 4;
+      fit += 7;
     }
   }
 
@@ -368,7 +368,7 @@ export function roleFitDetails(
 
   if (jobHasSpecificTitle && !hasProfileTitleToken && fit < 20) fit -= 16;
   if (avoidTitleMatch && !strongTitleMatch) fit = Math.min(fit, -18);
-  if (secondaryOnly && !strongTitleMatch) fit = Math.min(fit, 16);
+  if (secondaryOnly && !strongTitleMatch) fit = Math.min(fit, 34);
 
   const score = Math.round(fit);
   return {
@@ -522,9 +522,7 @@ function compatibleTitle(primary: string, candidate: string) {
   const overlap = c.filter((token) => p.includes(token)).length;
   if (overlap / Math.min(p.length, c.length) >= 0.45) return true;
 
-  const primarySoftware = p.some((token) => SOFTWARE_FAMILY.has(token));
-  const candidateSoftware = c.some((token) => SOFTWARE_FAMILY.has(token));
-  return primarySoftware && candidateSoftware;
+  return roleHeadsCompatible(roleHead(primary), roleHead(candidate));
 }
 
 function adjacentToPrimary(primary: string, candidate: string, targetTitles: string[]) {
@@ -537,10 +535,13 @@ function adjacentToPrimary(primary: string, candidate: string, targetTitles: str
 const ROLE_HEADS = new Set([
   "developer",
   "engineer",
+  "programmer",
   "analyst",
   "manager",
   "designer",
   "editor",
+  "artist",
+  "producer",
   "consultant",
   "specialist",
   "administrator",
@@ -549,23 +550,11 @@ const ROLE_HEADS = new Set([
   "associate",
 ]);
 
-const SOFTWARE_FAMILY = new Set([
-  "software",
-  "developer",
-  "engineer",
-  "programmer",
-  "full",
-  "stack",
-  "frontend",
-  "backend",
-  "front",
-  "back",
-  "web",
-  "react",
-  "node",
-  "javascript",
-  "typescript",
-]);
+const ROLE_HEAD_GROUPS = [
+  new Set(["developer", "engineer", "programmer", "architect"]),
+  new Set(["analyst", "specialist", "consultant", "associate"]),
+  new Set(["designer", "editor", "artist", "producer"]),
+];
 
 const TITLE_STOP = new Set([
   "junior",
@@ -590,6 +579,12 @@ function comparableTokens(value: string) {
 
 function roleHead(value: string) {
   return comparableTokens(value).find((token) => ROLE_HEADS.has(token)) ?? "";
+}
+
+function roleHeadsCompatible(a: string, b: string) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return ROLE_HEAD_GROUPS.some((group) => group.has(a) && group.has(b));
 }
 
 function normalizeComparable(value: string) {

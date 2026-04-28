@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, Briefcase, FileText, Users } from "lucide-react";
+import { Activity, AlertTriangle, Briefcase, FileText, RefreshCw, Users } from "lucide-react";
 import Link from "next/link";
 import type React from "react";
 import { Badge } from "@/components/ui/badge";
@@ -15,10 +15,11 @@ import { AppLog } from "@/models/app-log";
 import { Job } from "@/models/job";
 import { JobSourceHealth } from "@/models/job-source-health";
 import { Resume } from "@/models/resume";
-import { loginAdmin, logoutAdmin } from "./actions";
+import { loginAdmin, logoutAdmin, refreshAdminUserJobs } from "./actions";
 import { type AdminLogRow, LogsTable } from "./logs-table";
 
 export const metadata = { title: "Admin" };
+export const maxDuration = 60;
 
 type UserRow = {
   id?: string;
@@ -36,7 +37,7 @@ export default async function AdminPage({
 }) {
   const admin = await getAdminSession();
   const sp = await searchParams;
-  if (!admin) return <AdminLogin hasError={sp.error === "1"} />;
+  if (!admin) return <AdminLogin hasError={firstParam(sp.error) === "1"} />;
 
   await connectMongoose();
   const db = getDb();
@@ -150,6 +151,8 @@ export default async function AdminPage({
   const verified = users.filter((u) => u.emailVerified).length;
   const activeResumeUsers = new Set(resumes.filter((r) => r.isActive).map((r) => r.userId)).size;
   const unseenLogs = logs.filter((log) => !log.seen).length;
+  const refreshState = firstParam(sp.refresh);
+  const refreshMessage = firstParam(sp.message);
 
   return (
     <div className="space-y-6 px-4 py-6 sm:px-6">
@@ -169,6 +172,18 @@ export default async function AdminPage({
           </form>
         </div>
       </div>
+
+      {refreshMessage && (
+        <div
+          className={`rounded-lg border p-3 text-sm ${
+            refreshState === "ok"
+              ? "border-[var(--color-success)] bg-[var(--color-success-soft)]"
+              : "border-[var(--color-danger)] bg-[var(--color-danger-soft)]"
+          }`}
+        >
+          {refreshMessage}
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Metric icon={Users} label="Signed up users" value={totalUsers} />
@@ -242,6 +257,13 @@ export default async function AdminPage({
                         {user.emailVerified ? "verified" : "unverified"}
                       </Badge>
                       <Badge variant="outline">{userResumes.length} resumes</Badge>
+                      <form action={refreshAdminUserJobs}>
+                        <input type="hidden" name="userId" value={userId} />
+                        <Button type="submit" variant="outline" size="sm" disabled={!active}>
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          Refresh jobs
+                        </Button>
+                      </form>
                     </div>
                   </div>
 
@@ -410,6 +432,10 @@ function AdminLogin({ hasError }: { hasError: boolean }) {
   );
 }
 
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function Metric({
   icon: Icon,
   label,
@@ -499,20 +525,10 @@ function topProfessionCounts(
 }
 
 function normalizeProfession(raw: string) {
-  const value = raw.toLowerCase();
-  if (/cyber|security|soc|incident|vulnerability/.test(value)) return "cybersecurity";
-  if (/front[-\s]?end|react|vue|angular/.test(value)) return "frontend developer";
-  if (/back[-\s]?end|node|java|python|api/.test(value)) return "backend developer";
-  if (/full[-\s]?stack/.test(value)) return "full stack developer";
-  if (/finance|financial|accounting|audit/.test(value)) return "finance";
-  if (/video|editor|motion|premiere|after effects/.test(value)) return "video editing";
-  if (/data|analytics|analyst/.test(value)) return "data";
-  if (/machine learning|ml|ai/.test(value)) return "machine learning";
-  if (/devops|sre|cloud|platform/.test(value)) return "devops";
-  if (/design|ui|ux/.test(value)) return "design";
   return (
     raw
       .split(/[|,(-]/)[0]
+      ?.replace(/\s+/g, " ")
       ?.trim()
       .toLowerCase() || "unknown"
   );
