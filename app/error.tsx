@@ -2,7 +2,7 @@
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
-export default function Error({
+export default function AppError({
   error,
   reset,
 }: {
@@ -11,6 +11,16 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error(error);
+    void fetch("/api/client-error", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: error.message,
+        digest: error.digest,
+        stack: error.stack,
+        path: window.location.pathname,
+      }),
+    }).catch(() => {});
   }, [error]);
   return (
     <div className="grid min-h-screen place-items-center px-6 text-center">

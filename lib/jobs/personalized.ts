@@ -1,8 +1,10 @@
 import { Job } from "@/models/job";
 import { env } from "../env";
+import { inferCountry } from "../match/location";
 import type { ParsedResume } from "../resume/schema";
 import { dedupeHash } from "./dedupe";
 import { quickSkillExtract } from "./enrich";
+import { cacheTtlMs } from "./ingest/runner";
 import { buildResumeJobProfile, jobMatchesProfile, type ResumeJobProfile } from "./profile";
 import { inferSeniority, type NormalizedJob, stripHtml } from "./types";
 
@@ -282,15 +284,26 @@ export async function* streamPersonalizedJobs(
 }
 
 export function enrichForUpsert(jobs: NormalizedJob[]) {
+  const now = Date.now();
   return jobs.map((j) => {
     const skills = quickSkillExtract(`${j.title} ${j.description}`);
     return {
       ...j,
-      dedupeHash: dedupeHash(j.title, j.company, j.location),
+      country: j.country || inferCountry(j.location),
+      sourceQuality: j.sourceQuality ?? personalizedSourceQuality(j.source),
+      dedupeHash: dedupeHash(j.title, j.company, j.location, j.url),
       extractedSkills: skills,
-      fetchedAt: new Date(),
+      fetchedAt: new Date(now),
+      cacheExpiresAt: new Date(now + cacheTtlMs(j.source)),
     };
   });
+}
+
+function personalizedSourceQuality(source: string) {
+  if (source === "adzuna") return 72;
+  if (source === "jooble") return 68;
+  if (source === "remotive") return 45;
+  return 55;
 }
 
 export async function fetchAndStorePersonalizedJobs(

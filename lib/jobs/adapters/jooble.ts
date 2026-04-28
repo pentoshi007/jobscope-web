@@ -1,5 +1,6 @@
+import { errorToLog, logAppEvent } from "../../app-log";
 import { env } from "../../env";
-import { type JobAdapter, type NormalizedJob, inferSeniority, stripHtml } from "../types";
+import { inferSeniority, type JobAdapter, type NormalizedJob, stripHtml } from "../types";
 
 interface JoobleJob {
   id: number;
@@ -29,7 +30,15 @@ export const joobleAdapter: JobAdapter = {
         const j = (await r.json()) as { jobs: JoobleJob[] };
         all.push(...(j.jobs ?? []));
       } catch (e) {
-        console.error("Jooble failed", e);
+        const details = errorToLog(e);
+        await logAppEvent({
+          kind: "job_source",
+          source: "jobs.jooble",
+          path: "/api/cron/fetch-jobs",
+          message: details.message,
+          stack: details.stack,
+          meta: { keyword },
+        });
       }
     }
     return all;

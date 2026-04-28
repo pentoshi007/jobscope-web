@@ -18,6 +18,7 @@ const JobSchema = new Schema(
     title: { type: String, required: true },
     company: { type: String, required: true },
     location: { type: String, default: "" },
+    country: { type: String, default: "", index: true },
     remote: { type: Boolean, default: false },
     workMode: { type: String, enum: ["remote", "hybrid", "onsite", "unknown"], default: "unknown" },
     description: { type: String, default: "" },
@@ -33,15 +34,19 @@ const JobSchema = new Schema(
     },
     category: { type: String, default: "" },
     tags: { type: [String], default: [] },
+    sourceQuality: { type: Number, default: 50 },
     fetchedAt: { type: Date, default: Date.now },
+    cacheExpiresAt: { type: Date, default: () => new Date(Date.now() + 48 * 60 * 60 * 1000) },
   },
   { timestamps: true },
 );
 
 JobSchema.index({ externalId: 1, source: 1 }, { unique: true });
 JobSchema.index({ title: "text", company: "text", description: "text" });
-JobSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 });
+JobSchema.index({ fetchedAt: 1 });
+JobSchema.index({ cacheExpiresAt: 1 }, { expireAfterSeconds: 0 });
 JobSchema.index({ extractedSkills: 1, fetchedAt: -1, postedAt: -1 });
+JobSchema.index({ country: 1, workMode: 1, cacheExpiresAt: 1, postedAt: -1 });
 
 export type JobDoc = InferSchemaType<typeof JobSchema> & { _id: mongoose.Types.ObjectId };
 

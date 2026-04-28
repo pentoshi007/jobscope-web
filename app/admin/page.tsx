@@ -8,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { getAdminSession, hasAdminPasswordConfigured } from "@/lib/admin";
 import { connectMongoose, getDb } from "@/lib/db";
 import { buildResumeJobProfile, familyLabels, jobMatchesProfile } from "@/lib/jobs/profile";
-import { score } from "@/lib/match/score";
+import { rankJobsForUser } from "@/lib/jobs/rank";
 import { getSignedDownloadUrl } from "@/lib/r2";
 import { formatRelative } from "@/lib/utils";
 import { AppLog } from "@/models/app-log";
 import { Job } from "@/models/job";
+import { JobSourceHealth } from "@/models/job-source-health";
 import { Resume } from "@/models/resume";
 import { loginAdmin, logoutAdmin } from "./actions";
 import { type AdminLogRow, LogsTable } from "./logs-table";
@@ -40,7 +41,7 @@ export default async function AdminPage({
   await connectMongoose();
   const db = getDb();
 
-  const [users, resumes, jobs, logs] = await Promise.all([
+  const [users, resumes, jobs, logs, sourceHealth] = await Promise.all([
     db
       .collection<UserRow>("user")
       .find({}, { projection: { id: 1, name: 1, email: 1, emailVerified: 1, createdAt: 1 } })
@@ -51,7 +52,12 @@ export default async function AdminPage({
       .sort({ createdAt: -1 })
       .select({ userId: 1, name: 1, fileKey: 1, fileName: 1, isActive: 1, parsed: 1, createdAt: 1 })
       .lean(),
-    Job.find({ fetchedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } })
+    Job.find({
+      $or: [
+        { cacheExpiresAt: { $gte: new Date() } },
+        { fetchedAt: { $gte: new Date(Date.now() - 48 * 60 * 60 * 1000) } },
+      ],
+    })
       .sort({ postedAt: -1 })
       .limit(300)
       .select({
@@ -80,7 +86,28 @@ export default async function AdminPage({
         status: 1,
         count: 1,
         seen: 1,
+        firstSeenAt: 1,
         lastSeenAt: 1,
+        stack: 1,
+        meta: 1,
+      })
+      .lean(),
+    JobSourceHealth.find({})
+      .sort({ failed: -1, lastRunAt: -1 })
+      .limit(30)
+      .select({
+        source: 1,
+        enabled: 1,
+        fetched: 1,
+        normalized: 1,
+        upserted: 1,
+        skipped: 1,
+        failed: 1,
+        durationMs: 1,
+        lastSuccessAt: 1,
+        lastErrorAt: 1,
+        lastError: 1,
+        lastRunAt: 1,
       })
       .lean(),
   ]);
@@ -109,17 +136,11 @@ export default async function AdminPage({
     const active = userResumes.find((resume) => resume.isActive) ?? userResumes[0];
     const profile = active ? buildResumeJobProfile([active.parsed as never]) : null;
     const suggestions = active
-      ? jobs
-          .filter((job) => !profile || jobMatchesProfile(profile, job))
-          .map((job) => ({
-            job,
-            match: score(active.parsed as never, job as never, {
-              roleProfile: profile ?? undefined,
-            }),
-          }))
-          .filter(({ match }) => match.score >= 30)
-          .sort((a, b) => b.match.score - a.match.score)
-          .slice(0, 3)
+      ? rankJobsForUser<(typeof jobs)[number]>(
+          [active.parsed as never],
+          jobs.filter((job) => !profile || jobMatchesProfile(profile, job)),
+          { roleProfile: profile ?? undefined, minScore: 30, limit: 3 },
+        ).map(({ j, m }) => ({ job: j, match: m }))
       : [];
     return { user, userId, resumes: userResumes.slice(0, 3), active, profile, suggestions };
   });
@@ -140,7 +161,7 @@ export default async function AdminPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">Last 24h jobs: {jobs.length}</Badge>
+          <Badge variant="outline">Last 48h jobs: {jobs.length}</Badge>
           <form action={logoutAdmin}>
             <Button type="submit" variant="outline" size="sm">
               Log out
@@ -155,6 +176,46 @@ export default async function AdminPage({
         <Metric icon={Briefcase} label="Cached jobs" value={jobs.length} />
         <Metric icon={AlertTriangle} label="Unseen logs" value={unseenLogs} />
       </div>
+
+      <Card className="p-4 sm:p-5">
+        <div className="mb-4 flex items-center gap-2">
+          <Briefcase className="h-4 w-4 text-[var(--color-accent)]" />
+          <h2 className="font-semibold tracking-tight">Job source health</h2>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {sourceHealth.map((source) => (
+            <div
+              key={source.source}
+              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-mono text-sm">{source.source}</div>
+                <Badge variant={!source.enabled ? "outline" : source.failed ? "danger" : "success"}>
+                  {!source.enabled ? "disabled" : source.failed ? "issue" : "healthy"}
+                </Badge>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                <SourceStat label="fetched" value={source.fetched} />
+                <SourceStat label="upserted" value={source.upserted} />
+                <SourceStat label="ms" value={source.durationMs} />
+              </div>
+              {source.lastError && (
+                <p className="mt-2 line-clamp-2 text-xs text-[var(--color-danger)]">
+                  {source.lastError}
+                </p>
+              )}
+              <p className="mt-2 text-xs text-[var(--color-fg-subtle)]">
+                Last run {formatRelative(source.lastRunAt ?? new Date())}
+              </p>
+            </div>
+          ))}
+          {sourceHealth.length === 0 && (
+            <p className="text-sm text-[var(--color-fg-muted)]">
+              Source health will appear after the next job fetch.
+            </p>
+          )}
+        </div>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="p-4 sm:p-5">
@@ -384,6 +445,15 @@ function Bar({ value }: { value: number }) {
   );
 }
 
+function SourceStat({ label, value }: { label: string; value?: number | null }) {
+  return (
+    <div>
+      <div className="font-mono text-sm">{value ?? 0}</div>
+      <div className="text-[10px] uppercase text-[var(--color-fg-subtle)]">{label}</div>
+    </div>
+  );
+}
+
 function resumeSkills(parsed: {
   skills?: {
     languages?: string[] | null;
@@ -458,7 +528,10 @@ function toLogRow(log: {
   status?: number | null;
   count?: number;
   seen?: boolean;
+  firstSeenAt?: Date;
   lastSeenAt?: Date;
+  stack?: string;
+  meta?: unknown;
 }): AdminLogRow {
   return {
     id: String(log._id),
@@ -470,6 +543,9 @@ function toLogRow(log: {
     status: log.status ?? null,
     count: log.count ?? 1,
     seen: !!log.seen,
+    firstSeenAt: (log.firstSeenAt ?? new Date()).toISOString(),
     lastSeenAt: (log.lastSeenAt ?? new Date()).toISOString(),
+    stack: log.stack ?? "",
+    meta: (log.meta as Record<string, unknown> | undefined) ?? {},
   };
 }

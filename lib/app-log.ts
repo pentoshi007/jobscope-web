@@ -3,7 +3,16 @@ import { connectMongoose } from "@/lib/db";
 import { AppLog } from "@/models/app-log";
 
 type LogLevel = "error" | "warn" | "info";
-type LogKind = "error" | "rate_limit" | "cron" | "resume" | "api";
+type LogKind =
+  | "error"
+  | "rate_limit"
+  | "cron"
+  | "resume"
+  | "api"
+  | "job_source"
+  | "client"
+  | "email"
+  | "runtime";
 
 declare global {
   // eslint-disable-next-line no-var

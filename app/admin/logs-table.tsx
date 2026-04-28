@@ -16,7 +16,10 @@ export interface AdminLogRow {
   status: number | null;
   count: number;
   seen: boolean;
+  firstSeenAt: string;
   lastSeenAt: string;
+  stack: string;
+  meta: Record<string, unknown>;
 }
 
 export function LogsTable({ logs }: { logs: AdminLogRow[] }) {
@@ -128,6 +131,21 @@ export function LogsTable({ logs }: { logs: AdminLogRow[] }) {
                       {log.path}
                     </p>
                   )}
+                  {(log.stack || Object.keys(log.meta).length > 0) && (
+                    <details className="mt-2 text-xs text-[var(--color-fg-muted)]">
+                      <summary className="cursor-pointer">Details</summary>
+                      {log.stack && (
+                        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-[var(--color-bg-subtle)] p-2">
+                          {log.stack}
+                        </pre>
+                      )}
+                      {Object.keys(log.meta).length > 0 && (
+                        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-[var(--color-bg-subtle)] p-2">
+                          {JSON.stringify(log.meta, null, 2)}
+                        </pre>
+                      )}
+                    </details>
+                  )}
                 </td>
                 <td className="px-3 py-3 font-mono text-xs text-[var(--color-fg-muted)]">
                   {log.source || "-"}
@@ -135,7 +153,10 @@ export function LogsTable({ logs }: { logs: AdminLogRow[] }) {
                 <td className="px-3 py-3 font-mono text-xs">{log.status ?? "-"}</td>
                 <td className="px-3 py-3 font-mono text-xs">{log.count}</td>
                 <td className="px-3 py-3 text-xs text-[var(--color-fg-muted)]">
-                  {new Date(log.lastSeenAt).toLocaleString()}
+                  <div>{new Date(log.lastSeenAt).toLocaleString()}</div>
+                  <div className="font-mono text-[10px]">
+                    first {new Date(log.firstSeenAt).toLocaleString()}
+                  </div>
                 </td>
               </tr>
             ))}

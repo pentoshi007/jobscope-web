@@ -22,6 +22,8 @@ export interface NormalizedJob {
   category: string;
   tags: string[];
   seniority: Seniority;
+  country?: string;
+  sourceQuality?: number;
 }
 
 export interface JobAdapter {

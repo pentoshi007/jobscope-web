@@ -2,10 +2,11 @@ import { after, type NextRequest, NextResponse } from "next/server";
 import { errorToLog, logAppEvent } from "@/lib/app-log";
 import { connectMongoose, getDb } from "@/lib/db";
 import { env } from "@/lib/env";
-import { ADAPTERS } from "@/lib/jobs/adapters";
-import { dedupeHash } from "@/lib/jobs/dedupe";
-import { llmSkillExtract, quickSkillExtract } from "@/lib/jobs/enrich";
+import { llmSkillExtract } from "@/lib/jobs/enrich";
+import { runIngestSources } from "@/lib/jobs/ingest/runner";
+import { buildIngestSources } from "@/lib/jobs/ingest/sources";
 import { buildPersonalizedQuery, fetchAndStorePersonalizedJobs } from "@/lib/jobs/personalized";
+import { inferCountry } from "@/lib/match/location";
 import { Job } from "@/models/job";
 import { Resume } from "@/models/resume";
 // revalidation handled by cache components TTL
@@ -25,81 +26,63 @@ export async function POST(req: NextRequest) {
 }
 
 async function runFetch() {
+  const runStartedAt = Date.now();
+  const cronDeadlineAt = runStartedAt + 55_000;
   await connectMongoose();
   const summary: Record<string, { fetched: number; upserted: number; error?: string }> = {};
-
-  await Promise.allSettled(
-    ADAPTERS.map(async (adapter) => {
-      const stat = { fetched: 0, upserted: 0 } as {
-        fetched: number;
-        upserted: number;
-        error?: string;
-      };
-      try {
-        const raw = await adapter.fetch();
-        stat.fetched = raw.length;
-        const ops = raw
-          .map((r) => adapter.normalize(r))
-          .filter((j): j is NonNullable<ReturnType<typeof adapter.normalize>> => !!j)
-          .map((j) => {
-            const skills = quickSkillExtract(`${j.title} ${j.description}`);
-            return {
-              updateOne: {
-                filter: { externalId: j.externalId, source: j.source },
-                update: {
-                  $set: {
-                    ...j,
-                    dedupeHash: dedupeHash(j.title, j.company, j.location),
-                    extractedSkills: skills,
-                    fetchedAt: new Date(),
-                  },
-                },
-                upsert: true,
-              },
-            };
-          });
-        if (ops.length) {
-          const res = await Job.bulkWrite(ops as never, { ordered: false });
-          stat.upserted = (res.upsertedCount ?? 0) + (res.modifiedCount ?? 0);
-        }
-      } catch (e) {
-        stat.error = e instanceof Error ? e.message : "unknown";
-        const details = errorToLog(e);
-        after(() =>
-          logAppEvent({
-            kind: "cron",
-            source: `cron.fetch-jobs.${adapter.source}`,
-            path: "/api/cron/fetch-jobs",
-            message: details.message,
-            stack: details.stack,
-          }),
-        );
-      }
-      summary[adapter.source] = stat;
-    }),
+  const activeResumes = await Resume.find({ isActive: true, deletedAt: null })
+    .sort({ updatedAt: -1 })
+    .limit(50)
+    .select({ userId: 1, parsed: 1 })
+    .lean();
+  const db = getDb();
+  const users = await db
+    .collection("user")
+    .find(
+      { id: { $in: activeResumes.map((resume) => resume.userId) } },
+      { projection: { id: 1, preferences: 1 } },
+    )
+    .toArray();
+  const prefsByUser = new Map(
+    users.map((user) => [String(user.id), safePreferredLocations(user.preferences)]),
   );
 
-  try {
-    const db = getDb();
-    const activeResumes = await Resume.find({ isActive: true, deletedAt: null })
-      .sort({ updatedAt: -1 })
-      .limit(50)
-      .select({ userId: 1, parsed: 1 })
-      .lean();
-    const users = await db
-      .collection("user")
-      .find(
-        { id: { $in: activeResumes.map((resume) => resume.userId) } },
-        { projection: { id: 1, preferences: 1 } },
-      )
-      .toArray();
-    const prefsByUser = new Map(
-      users.map((user) => [String(user.id), safePreferredLocations(user.preferences)]),
-    );
+  const ingest = await runIngestSources(buildIngestSources(), {
+    roles: aggregateRoles(activeResumes.map((resume) => resume.parsed as never)),
+    countries: aggregateCountries(
+      activeResumes.map((resume) => resume.parsed as never),
+      [...prefsByUser.values()].flat(),
+    ),
+    cities: aggregateCities(
+      activeResumes.map((resume) => resume.parsed as never),
+      [...prefsByUser.values()].flat(),
+    ),
+    maxDurationMs: 32_000,
+    concurrency: 4,
+  });
+  for (const [source, stat] of Object.entries(ingest)) {
+    summary[source] = {
+      fetched: stat.fetched,
+      upserted: stat.upserted,
+      ...(stat.error ? { error: stat.error } : {}),
+    };
+  }
 
+  try {
     let personalizedFetched = 0;
     let personalizedUpserted = 0;
     for (const resume of activeResumes) {
+      if (Date.now() >= cronDeadlineAt) {
+        await logAppEvent({
+          level: "warn",
+          kind: "cron",
+          source: "cron.fetch-jobs.personalized",
+          path: "/api/cron/fetch-jobs",
+          message: "Personalized job fetch stopped because cron deadline was reached",
+          meta: { processedFetched: personalizedFetched, processedUpserted: personalizedUpserted },
+        });
+        break;
+      }
       const query = buildPersonalizedQuery(
         [resume.parsed as never],
         prefsByUser.get(resume.userId) ?? [],
@@ -158,7 +141,13 @@ async function runFetch() {
   let deletedOld = 0;
   if (successfulFetch) {
     const res = await Job.deleteMany({
-      fetchedAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      $or: [
+        { cacheExpiresAt: { $lt: new Date() } },
+        {
+          cacheExpiresAt: { $exists: false },
+          fetchedAt: { $lt: new Date(Date.now() - TWO_DAYS_MS) },
+        },
+      ],
     });
     deletedOld = res.deletedCount ?? 0;
   }
@@ -173,4 +162,37 @@ function safePreferredLocations(raw: unknown) {
   } catch {
     return [];
   }
+}
+
+const TWO_DAYS_MS = 48 * 60 * 60 * 1000;
+
+function aggregateRoles(
+  resumes: Array<{ jobSearchProfile?: { searchQueries?: string[]; primaryRole?: string } }>,
+) {
+  return unique(
+    resumes.flatMap((resume) => [
+      ...(resume.jobSearchProfile?.searchQueries ?? []),
+      resume.jobSearchProfile?.primaryRole ?? "",
+    ]),
+  ).slice(0, 8);
+}
+
+function aggregateCountries(resumes: Array<{ location?: string }>, preferredLocations: string[]) {
+  return unique(
+    [...preferredLocations, ...resumes.map((resume) => resume.location ?? "")]
+      .map(inferCountry)
+      .filter(Boolean),
+  ).slice(0, 6);
+}
+
+function aggregateCities(resumes: Array<{ location?: string }>, preferredLocations: string[]) {
+  return unique(
+    [...preferredLocations, ...resumes.map((resume) => resume.location ?? "")]
+      .map((loc) => loc.split(",")[0]?.trim() ?? "")
+      .filter(Boolean),
+  ).slice(0, 10);
+}
+
+function unique(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }

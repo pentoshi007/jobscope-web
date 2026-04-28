@@ -6,7 +6,17 @@ const AppLogSchema = new Schema(
     level: { type: String, enum: ["error", "warn", "info"], default: "error", index: true },
     kind: {
       type: String,
-      enum: ["error", "rate_limit", "cron", "resume", "api"],
+      enum: [
+        "error",
+        "rate_limit",
+        "cron",
+        "resume",
+        "api",
+        "job_source",
+        "client",
+        "email",
+        "runtime",
+      ],
       default: "error",
       index: true,
     },

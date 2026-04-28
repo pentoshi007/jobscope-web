@@ -1,3 +1,4 @@
+import { logAppEvent } from "../../app-log";
 import { env } from "../../env";
 import { inferSeniority, type JobAdapter, type NormalizedJob, stripHtml } from "../types";
 
@@ -25,7 +26,13 @@ export const usajobsAdapter: JobAdapter = {
     const apiKey = env.USAJOBS_API_KEY;
     const userAgent = env.USAJOBS_USER_AGENT;
     if (!apiKey || !userAgent) {
-      console.info("[cron] usajobs skipped — USAJOBS_API_KEY/USAJOBS_USER_AGENT not set");
+      await logAppEvent({
+        level: "info",
+        kind: "job_source",
+        source: "jobs.usajobs",
+        path: "/api/cron/fetch-jobs",
+        message: "USAJobs skipped because credentials are not configured",
+      });
       return [];
     }
     const r = await fetch(
@@ -40,7 +47,14 @@ export const usajobsAdapter: JobAdapter = {
       },
     );
     if (r.status === 401 || r.status === 403) {
-      console.warn("[cron] usajobs auth rejected — check USAJOBS_API_KEY/USAJOBS_USER_AGENT");
+      await logAppEvent({
+        level: "warn",
+        kind: "job_source",
+        source: "jobs.usajobs",
+        path: "/api/cron/fetch-jobs",
+        status: r.status,
+        message: "USAJobs authentication rejected",
+      });
       return [];
     }
     if (!r.ok) throw new Error(`USAJobs ${r.status}`);

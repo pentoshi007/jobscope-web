@@ -4,7 +4,8 @@ import { errorToLog, logAppEvent } from "@/lib/app-log";
 import { connectMongoose, getDb } from "@/lib/db";
 import { buildPersonalizedQuery } from "@/lib/jobs/personalized";
 import { jobMatchesProfile } from "@/lib/jobs/profile";
-import { score } from "@/lib/match/score";
+import { rankJobsForUser } from "@/lib/jobs/rank";
+import type { MatchResult } from "@/lib/match/score";
 import { parsePrefs } from "@/lib/preferences";
 import { getSession } from "@/lib/session";
 import { Job, type JobDoc } from "@/models/job";
@@ -20,7 +21,7 @@ function sse(controller: ReadableStreamDefaultController, event: string, data: S
   controller.enqueue(new TextEncoder().encode(msg));
 }
 
-function jobToWire(job: JobDoc, m: ReturnType<typeof score>) {
+function jobToWire(job: JobDoc, m: MatchResult) {
   return {
     id: String(job._id),
     title: job.title,
@@ -98,8 +99,10 @@ export async function GET(_req: NextRequest) {
         });
 
         // Score only cached jobs. Fresh external API fetches happen on resume upload and cron.
-        const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const filter: Record<string, unknown> = { fetchedAt: { $gte: since } };
+        const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
+        const filter: Record<string, unknown> = {
+          $or: [{ cacheExpiresAt: { $gte: new Date() } }, { fetchedAt: { $gte: since } }],
+        };
 
         const cached = await Job.find(filter)
           .sort({ postedAt: -1 })
@@ -118,26 +121,27 @@ export async function GET(_req: NextRequest) {
             category: 1,
             tags: 1,
             extractedSkills: 1,
+            country: 1,
+            workMode: 1,
+            sourceQuality: 1,
+            cacheExpiresAt: 1,
           })
           .lean();
 
         safeSend("status", { phase: "scoring", count: cached.length });
 
         const seenIds = new Set<string>();
-        const scored = cached
-          .filter((j) => jobMatchesProfile(pq.profile, j))
-          .map((j) => {
-            const matches = resumes.map((r) =>
-              score(r.parsed as never, j as never, {
-                preferredLocations: prefs.preferredLocations,
-                roleProfile: pq.profile,
-              }),
-            );
-            return { j, m: matches.reduce((a, b) => (a.score >= b.score ? a : b)) };
-          })
-          .filter(({ m }) => m.score >= 30)
-          .sort((a, b) => b.m.score - a.m.score)
-          .slice(0, 60);
+        const scored = rankJobsForUser<(typeof cached)[number]>(
+          resumes.map((r) => r.parsed as never),
+          cached.filter((j) => jobMatchesProfile(pq.profile, j)),
+          {
+            preferredLocations: prefs.preferredLocations,
+            roleProfile: pq.profile,
+            minScore: 30,
+            limit: 60,
+            remoteOnly: prefs.remoteOnly,
+          },
+        );
 
         const BATCH = 8;
         for (let i = 0; i < scored.length; i += BATCH) {
