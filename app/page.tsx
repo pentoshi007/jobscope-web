@@ -1,26 +1,26 @@
-import Link from "next/link";
 import {
   ArrowRight,
-  Sparkles,
-  Brain,
-  Layers,
-  Zap,
-  ShieldCheck,
-  Mail,
-  FileText,
-  Search,
   Bookmark,
+  Brain,
+  Check,
+  FileText,
+  Layers,
+  Mail,
+  Search,
   Send,
+  ShieldCheck,
+  Sparkles,
   Trophy,
   X,
-  Check,
+  Zap,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { MarketingNav, MarketingFooter } from "@/components/marketing/nav";
-import { Reveal } from "@/components/marketing/reveal";
-import { Marquee } from "@/components/marketing/marquee";
+import Link from "next/link";
 import { AnimatedScore } from "@/components/marketing/animated-score";
+import { Marquee } from "@/components/marketing/marquee";
+import { MarketingFooter, MarketingNav } from "@/components/marketing/nav";
+import { Reveal } from "@/components/marketing/reveal";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 export default function LandingPage() {
   return (
@@ -88,6 +88,7 @@ function Hero() {
             Job search,{" "}
             <span className="relative inline-block text-[var(--color-fg)]">
               scoped
+              {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative underline */}
               <svg
                 aria-hidden
                 viewBox="0 0 220 14"
@@ -108,13 +109,18 @@ function Hero() {
         </Reveal>
         <Reveal delay={0.1}>
           <p className="mx-auto mt-7 max-w-xl text-balance text-lg leading-relaxed text-[var(--color-fg-muted)]">
-            Upload a resume. JobScope parses it, fans out to 7 free public job APIs, and ranks the
-            best matches with a transparent 0–100 score.
+            Upload a resume. JobScope parses it, fans out to public job APIs and LinkedIn via Apify,
+            then ranks the best matches with a transparent 0–100 score.
           </p>
         </Reveal>
         <Reveal delay={0.15}>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <Button size="lg" variant="accent" asChild className="shadow-lg shadow-[oklch(0.65_0.18_260_/_0.25)]">
+            <Button
+              size="lg"
+              variant="accent"
+              asChild
+              className="shadow-lg shadow-[oklch(0.65_0.18_260_/_0.25)]"
+            >
               <Link href="/signup">
                 Start free <ArrowRight className="h-4 w-4" />
               </Link>
@@ -144,10 +150,38 @@ function Hero() {
 
 function DashboardMock() {
   const jobs = [
-    { t: "Senior Backend Engineer", c: "Linear", l: "Remote · Europe", s: 94, m: ["Go", "Postgres", "gRPC"], miss: ["Kafka"] },
-    { t: "Platform Engineer", c: "Vercel", l: "Remote · Worldwide", s: 88, m: ["TypeScript", "AWS", "K8s"], miss: ["Pulumi"] },
-    { t: "Full-Stack Developer", c: "Notion", l: "San Francisco · Hybrid", s: 82, m: ["React", "Node"], miss: ["Rust"] },
-    { t: "Staff Engineer, Infra", c: "Linear", l: "Remote · US", s: 76, m: ["Go", "Terraform"], miss: ["Spanner", "ClickHouse"] },
+    {
+      t: "Senior Backend Engineer",
+      c: "Linear",
+      l: "Remote · Europe",
+      s: 94,
+      m: ["Go", "Postgres", "gRPC"],
+      miss: ["Kafka"],
+    },
+    {
+      t: "Platform Engineer",
+      c: "Vercel",
+      l: "Remote · Worldwide",
+      s: 88,
+      m: ["TypeScript", "AWS", "K8s"],
+      miss: ["Pulumi"],
+    },
+    {
+      t: "Full-Stack Developer",
+      c: "Notion",
+      l: "San Francisco · Hybrid",
+      s: 82,
+      m: ["React", "Node"],
+      miss: ["Rust"],
+    },
+    {
+      t: "Staff Engineer, Infra",
+      c: "Linear",
+      l: "Remote · US",
+      s: 76,
+      m: ["Go", "Terraform"],
+      miss: ["Spanner", "ClickHouse"],
+    },
   ];
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl shadow-black/5 ring-1 ring-black/5">
@@ -179,7 +213,9 @@ function DashboardMock() {
             <div
               key={n.l}
               className={`mb-0.5 rounded-md px-2.5 py-1.5 text-xs ${
-                n.a ? "bg-[var(--color-card)] font-medium text-[var(--color-fg)] shadow-sm" : "text-[var(--color-fg-muted)]"
+                n.a
+                  ? "bg-[var(--color-card)] font-medium text-[var(--color-fg)] shadow-sm"
+                  : "text-[var(--color-fg-muted)]"
               }`}
             >
               {n.l}
@@ -250,6 +286,8 @@ function Sources() {
     "Adzuna",
     "Jooble",
     "JSearch",
+    "LinkedIn via Apify",
+    "15-day LinkedIn cache",
     "Daily refresh",
     "Deduped",
     "Skill-tagged",
@@ -258,7 +296,7 @@ function Sources() {
     <section className="border-y border-[var(--color-border)] bg-[var(--color-bg-subtle)]/30 py-8">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <p className="mb-4 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-[var(--color-fg-subtle)]">
-          Aggregating from 7+ free job APIs
+          Aggregating from public job APIs plus cost-guarded LinkedIn scraping
         </p>
         <Marquee items={items} />
       </div>
@@ -449,7 +487,7 @@ function HowItWorks() {
       icon: Search,
       n: "02",
       t: "We aggregate jobs",
-      d: "A nightly cron pulls fresh listings from 7 sources, dedupes them, tags each with skills.",
+      d: "A nightly cron pulls fresh listings from public sources and only runs LinkedIn scraping when its 15-day cache is stale.",
     },
     {
       icon: Brain,
@@ -465,7 +503,10 @@ function HowItWorks() {
     },
   ];
   return (
-    <section id="how" className="border-t border-[var(--color-border)] bg-[var(--color-bg-subtle)]/40 py-16 sm:py-24">
+    <section
+      id="how"
+      className="border-t border-[var(--color-border)] bg-[var(--color-bg-subtle)]/40 py-16 sm:py-24"
+    >
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <Reveal>
           <div className="mx-auto max-w-2xl text-center">
@@ -504,7 +545,7 @@ function Comparison() {
   const rows = [
     ["Resume-aware ranking", true, false, false],
     ["Free forever", true, false, false],
-    ["Aggregates 7 sources", true, false, true],
+    ["Aggregates public APIs + LinkedIn", true, false, true],
     ["Drag-drop tracker", true, true, false],
     ["AI cover letters", true, true, false],
     ["No tracking ads", true, false, false],
@@ -523,42 +564,42 @@ function Comparison() {
       <Reveal delay={0.05}>
         <div className="mt-12 overflow-x-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)]">
           <div className="min-w-[560px]">
-          <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] border-b border-[var(--color-border)] bg-[var(--color-bg-subtle)]/60 px-5 py-3 text-xs font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
-            <span />
-            <span className="text-center text-[var(--color-accent)]">JobScope</span>
-            <span className="text-center">LinkedIn Premium</span>
-            <span className="text-center">Job board #N</span>
-          </div>
-          {rows.map(([label, a, b, c], i) => (
-            <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: stable
-              key={i}
-              className="grid grid-cols-[1.5fr_1fr_1fr_1fr] items-center border-b border-[var(--color-border)] px-5 py-3 text-sm last:border-b-0"
-            >
-              <span className="text-[var(--color-fg)]">{label}</span>
-              <span className="flex justify-center">
-                {a ? (
-                  <Check className="h-4 w-4 text-[var(--color-success)]" />
-                ) : (
-                  <X className="h-4 w-4 text-[var(--color-fg-subtle)]" />
-                )}
-              </span>
-              <span className="flex justify-center">
-                {b ? (
-                  <Check className="h-4 w-4 text-[var(--color-fg-muted)]" />
-                ) : (
-                  <X className="h-4 w-4 text-[var(--color-fg-subtle)]" />
-                )}
-              </span>
-              <span className="flex justify-center">
-                {c ? (
-                  <Check className="h-4 w-4 text-[var(--color-fg-muted)]" />
-                ) : (
-                  <X className="h-4 w-4 text-[var(--color-fg-subtle)]" />
-                )}
-              </span>
+            <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] border-b border-[var(--color-border)] bg-[var(--color-bg-subtle)]/60 px-5 py-3 text-xs font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
+              <span />
+              <span className="text-center text-[var(--color-accent)]">JobScope</span>
+              <span className="text-center">LinkedIn Premium</span>
+              <span className="text-center">Job board #N</span>
             </div>
-          ))}
+            {rows.map(([label, a, b, c], i) => (
+              <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: stable
+                key={i}
+                className="grid grid-cols-[1.5fr_1fr_1fr_1fr] items-center border-b border-[var(--color-border)] px-5 py-3 text-sm last:border-b-0"
+              >
+                <span className="text-[var(--color-fg)]">{label}</span>
+                <span className="flex justify-center">
+                  {a ? (
+                    <Check className="h-4 w-4 text-[var(--color-success)]" />
+                  ) : (
+                    <X className="h-4 w-4 text-[var(--color-fg-subtle)]" />
+                  )}
+                </span>
+                <span className="flex justify-center">
+                  {b ? (
+                    <Check className="h-4 w-4 text-[var(--color-fg-muted)]" />
+                  ) : (
+                    <X className="h-4 w-4 text-[var(--color-fg-subtle)]" />
+                  )}
+                </span>
+                <span className="flex justify-center">
+                  {c ? (
+                    <Check className="h-4 w-4 text-[var(--color-fg-muted)]" />
+                  ) : (
+                    <X className="h-4 w-4 text-[var(--color-fg-subtle)]" />
+                  )}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </Reveal>

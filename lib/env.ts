@@ -21,6 +21,8 @@ const schema = z.object({
   INDIANAPI_JOBS_KEY: z.string().optional(),
   USAJOBS_API_KEY: z.string().optional(),
   USAJOBS_USER_AGENT: z.string().optional(),
+  APIFY_API_TOKEN: z.string().optional(),
+  APIFY_LINKEDIN_ACTOR_ID: z.string().optional(),
 
   RESEND_API_KEY: z.string().min(1),
   EMAIL_FROM: z.string().email(),

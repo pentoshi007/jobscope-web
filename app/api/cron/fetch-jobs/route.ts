@@ -11,6 +11,7 @@ import { Job } from "@/models/job";
 import { Resume } from "@/models/resume";
 // revalidation handled by cache components TTL
 
+export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {

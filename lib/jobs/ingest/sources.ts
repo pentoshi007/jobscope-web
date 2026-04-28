@@ -9,6 +9,7 @@ import { usajobsAdapter } from "@/lib/jobs/adapters/usajobs";
 import { ATS_COMPANIES, type AtsCompany } from "@/lib/jobs/ats-companies";
 import { inferSeniority, type NormalizedJob, stripHtml } from "@/lib/jobs/types";
 import { inferCountry } from "@/lib/match/location";
+import { linkedinApifySource } from "./apify-linkedin";
 import type { IngestContext, IngestSource } from "./runner";
 import { safeFetchJson, safeFetchText } from "./safe-fetch";
 
@@ -17,6 +18,7 @@ const DEFAULT_CITIES = ["India", "Bengaluru", "Hyderabad", "Pune", "Mumbai", "De
 
 export function buildIngestSources(): IngestSource[] {
   return [
+    linkedinApifySource,
     wrapLegacyAdapter(adzunaAdapter, 72, 18_000),
     wrapLegacyAdapter(joobleAdapter, 68, 18_000),
     wrapLegacyAdapter(jsearchAdapter, 70, 18_000),

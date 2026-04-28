@@ -1,6 +1,7 @@
 import { errorToLog, logAppEvent } from "@/lib/app-log";
 import { dedupeHash } from "@/lib/jobs/dedupe";
 import { quickSkillExtract } from "@/lib/jobs/enrich";
+import { LINKEDIN_APIFY_SOURCE, LINKEDIN_APIFY_TTL_MS } from "@/lib/jobs/source-constants";
 import type { NormalizedJob } from "@/lib/jobs/types";
 import { inferCountry } from "@/lib/match/location";
 import { Job } from "@/models/job";
@@ -148,6 +149,7 @@ export function enrichForUpsert(jobs: NormalizedJob[], sourceQuality = 50) {
 }
 
 export function cacheTtlMs(source: string) {
+  if (source === LINKEDIN_APIFY_SOURCE) return LINKEDIN_APIFY_TTL_MS;
   if (source === "indianapi") return 10 * 24 * 60 * 60 * 1000;
   return 48 * 60 * 60 * 1000;
 }
