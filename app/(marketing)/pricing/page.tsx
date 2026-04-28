@@ -41,7 +41,7 @@ export default function PricingPage() {
             One tier. Zero rupees.
           </h1>
           <p className="mx-auto mt-5 max-w-md text-balance text-[var(--color-fg-muted)]">
-            JobScope runs on the free tiers of Atlas, R2, Vercel, Gemini, and Resend. We pass the
+            JobScope runs on generous free tiers for storage, hosting, AI, and email. We pass the
             savings on to you — forever.
           </p>
         </Reveal>

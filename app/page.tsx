@@ -276,7 +276,7 @@ function Features() {
     {
       icon: Zap,
       title: "AI helpers, on demand",
-      body: "Streaming cover letters, gap analyses, and interview prep — Gemini Flash with Groq fallback.",
+      body: "Streaming cover letters, gap analyses, and interview prep with privacy-first AI helpers.",
     },
     {
       icon: Layers,
@@ -296,7 +296,7 @@ function Features() {
     {
       icon: Sparkles,
       title: "Always free",
-      body: "Built on free tiers — Atlas M0, R2, Vercel, Gemini. We pass the savings to you. Forever.",
+      body: "Built on generous free tiers for storage, hosting, AI, and email. We pass the savings to you. Forever.",
     },
   ];
   return (
