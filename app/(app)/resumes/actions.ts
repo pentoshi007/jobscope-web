@@ -1,12 +1,15 @@
 "use server";
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { errorToLog, logAppEvent } from "@/lib/app-log";
 import { connectMongoose } from "@/lib/db";
-import { putResume, deleteObject } from "@/lib/r2";
+import { buildPersonalizedQuery, fetchAndStorePersonalizedJobs } from "@/lib/jobs/personalized";
+import { deleteObject, putResume } from "@/lib/r2";
 import { extractText } from "@/lib/resume/extract";
 import { parseResume } from "@/lib/resume/parse";
-import { Resume } from "@/models/resume";
 import { requireUserId } from "@/lib/session";
+import { Resume } from "@/models/resume";
 
 const ALLOWED = new Set([
   "application/pdf",
@@ -31,37 +34,66 @@ export async function uploadResume(formData: FormData): Promise<UploadResult> {
 
   await putResume(key, buf, file.type);
 
-  let rawText = "";
-  try {
-    rawText = await extractText(buf, file.type);
-    console.log(`[resume] extractText OK — ${rawText.length} chars from ${file.type}`);
-  } catch (e) {
-    console.error("[resume] extractText FAILED for", file.type, e);
-  }
-
-  let parsed = undefined;
-  try {
-    if (rawText.length > 0) {
-      parsed = await parseResume(rawText);
-      console.log(`[resume] parseResume OK — name="${parsed.fullName}", exp=${parsed.experience.length}`);
-    } else {
-      console.warn("[resume] Skipping parseResume — rawText is empty");
-    }
-  } catch (e) {
-    console.error("[resume] parseResume FAILED", e);
-  }
-
   await connectMongoose();
-  const existingActive = await Resume.findOne({ userId, isActive: true, deletedAt: null });
+  const existingActive = await Resume.exists({ userId, isActive: true, deletedAt: null });
   const doc = await Resume.create({
     userId,
     name,
     fileKey: key,
     fileName: file.name,
-    rawText,
-    parsed,
-    parsedAt: parsed ? new Date() : undefined,
     isActive: !existingActive,
+  });
+
+  after(async () => {
+    let rawText = "";
+    try {
+      rawText = await extractText(buf, file.type);
+    } catch (e) {
+      const details = errorToLog(e);
+      await logAppEvent({
+        kind: "resume",
+        source: "resume.extract",
+        userId,
+        message: details.message,
+        stack: details.stack,
+        meta: { fileType: file.type, fileName: file.name },
+      });
+    }
+
+    if (!rawText) {
+      await logAppEvent({
+        level: "warn",
+        kind: "resume",
+        source: "resume.extract",
+        userId,
+        message: "Resume text extraction returned no content",
+        meta: { fileType: file.type, fileName: file.name },
+      });
+      return;
+    }
+
+    try {
+      const parsed = await parseResume(rawText);
+      await connectMongoose();
+      await Resume.updateOne(
+        { _id: doc._id, userId },
+        { $set: { rawText, parsed, parsedAt: new Date() } },
+      );
+      await fetchAndStorePersonalizedJobs(buildPersonalizedQuery([parsed]), { allowAdzuna: true });
+      revalidatePath("/resumes");
+      revalidatePath(`/resumes/${String(doc._id)}`);
+      revalidatePath("/dashboard");
+    } catch (e) {
+      const details = errorToLog(e);
+      await logAppEvent({
+        kind: "resume",
+        source: "resume.parse",
+        userId,
+        message: details.message,
+        stack: details.stack,
+        meta: { fileName: file.name },
+      });
+    }
   });
 
   revalidatePath("/resumes");
@@ -85,7 +117,19 @@ export async function deleteResume(id: string) {
   const doc = await Resume.findOne({ _id: id, userId });
   if (!doc) return;
   await Resume.updateOne({ _id: id }, { $set: { deletedAt: new Date(), isActive: false } });
-  await deleteObject(doc.fileKey).catch(() => {});
+  after(async () => {
+    await deleteObject(doc.fileKey).catch(async (e) => {
+      const details = errorToLog(e);
+      await logAppEvent({
+        kind: "resume",
+        source: "resume.deleteObject",
+        userId,
+        message: details.message,
+        stack: details.stack,
+        meta: { resumeId: id, fileKey: doc.fileKey },
+      });
+    });
+  });
   revalidatePath("/resumes");
   revalidatePath("/dashboard");
 }

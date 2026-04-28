@@ -1,4 +1,5 @@
 import type { JobDoc } from "@/models/job";
+import { type ResumeJobProfile, roleFitScore } from "../jobs/profile";
 import { type ParsedResume, ParsedResumeSchema } from "../resume/schema";
 import { locationsMatch } from "./location";
 import { isAdjacent } from "./seniority";
@@ -89,7 +90,7 @@ export function score(
     title?: string;
     description?: string;
   },
-  prefs: { preferredLocations?: string[] } = {},
+  prefs: { preferredLocations?: string[]; roleProfile?: ResumeJobProfile } = {},
 ): MatchResult {
   const safeResume: ParsedResume = resume ?? ParsedResumeSchema.parse({});
 
@@ -170,11 +171,13 @@ export function score(
 
   const days = (Date.now() - new Date(job.postedAt).getTime()) / 86_400_000;
   const recencyScore = Math.max(0, 5 - days * 0.15);
+  const fitScore = prefs.roleProfile ? roleFitScore(prefs.roleProfile, job) : 0;
+  const rawScore =
+    skillScore + titleScore + seniorityScore + locationScore + expScore + recencyScore + fitScore;
+  const finalScore = fitScore < 0 ? Math.min(29, Math.round(rawScore)) : Math.round(rawScore);
 
   return {
-    score: Math.round(
-      skillScore + titleScore + seniorityScore + locationScore + expScore + recencyScore,
-    ),
+    score: Math.max(0, finalScore),
     breakdown: {
       skills: Math.round(skillScore),
       title: Math.round(titleScore),

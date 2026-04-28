@@ -1,8 +1,10 @@
-export { Resume } from "./resume";
-export type { ResumeDoc } from "./resume";
-export { Job } from "./job";
-export type { JobDoc } from "./job";
-export { Application } from "./application";
+export type { AppLogDoc } from "./app-log";
+export { AppLog } from "./app-log";
 export type { ApplicationDoc } from "./application";
-export { Match } from "./match";
+export { Application } from "./application";
+export type { JobDoc } from "./job";
+export { Job } from "./job";
 export type { MatchDoc } from "./match";
+export { Match } from "./match";
+export type { ResumeDoc } from "./resume";
+export { Resume } from "./resume";

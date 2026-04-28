@@ -1,5 +1,6 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { after, type NextRequest, NextResponse } from "next/server";
 import { loadJobAndResume } from "@/lib/ai/context";
+import { errorToLog, logAppEvent } from "@/lib/app-log";
 import { geminiText } from "@/lib/llm/gemini";
 import { groqText } from "@/lib/llm/groq";
 import { rateLimit } from "@/lib/rate-limit";
@@ -11,6 +12,17 @@ export async function POST(req: NextRequest) {
   const userId = await requireUserId();
   const rl = rateLimit(`ai:${userId}`, 10, 60_000);
   if (!rl.ok) {
+    after(() =>
+      logAppEvent({
+        level: "warn",
+        kind: "rate_limit",
+        source: "api.ai.cover-letter",
+        path: "/api/ai/cover-letter",
+        userId,
+        status: 429,
+        message: "AI cover letter rate limit exceeded",
+      }),
+    );
     return NextResponse.json(
       { ok: false, error: { code: "RATE_LIMITED", message: "Slow down" } },
       { status: 429 },
@@ -45,10 +57,22 @@ ${ctx.jobBlock}`;
         prompt,
       );
     } catch (e) {
+      const details = errorToLog(e);
+      after(() =>
+        logAppEvent({
+          kind: "api",
+          source: "api.ai.cover-letter",
+          path: "/api/ai/cover-letter",
+          userId,
+          status: 500,
+          message: details.message,
+          stack: details.stack,
+        }),
+      );
       return NextResponse.json(
         {
           ok: false,
-          error: { code: "AI_FAILED", message: e instanceof Error ? e.message : "AI failed" },
+          error: { code: "AI_FAILED", message: details.message || "AI failed" },
         },
         { status: 500 },
       );

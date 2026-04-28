@@ -1,4 +1,4 @@
-import mongoose, { Schema, type InferSchemaType } from "mongoose";
+import mongoose, { type InferSchemaType, Schema } from "mongoose";
 
 const ParsedSkillsSchema = new Schema(
   {
@@ -61,7 +61,7 @@ const ProjectSchema = new Schema(
   { _id: false },
 );
 
-const CertificationSchema = new Schema(
+const _CertificationSchema = new Schema(
   {
     name: String,
     issuer: String,
@@ -111,6 +111,8 @@ const ResumeSchema = new Schema(
 );
 
 ResumeSchema.index({ userId: 1, isActive: 1 });
+ResumeSchema.index({ userId: 1, deletedAt: 1, createdAt: -1 });
+ResumeSchema.index({ isActive: 1, deletedAt: 1, updatedAt: -1 });
 
 export type ResumeDoc = InferSchemaType<typeof ResumeSchema>;
 

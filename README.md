@@ -12,6 +12,7 @@ AI-powered job aggregator. Upload a resume → get ranked matches across 7 free 
 - Daily cron pulls + dedupes + skill-enriches every 24h
 - Match scoring (skills 50 / seniority 20 / location 15 / experience 10 / recency 5)
 - Dashboard with filters, search, ScoreDonut visualization
+- Admin console for users, resumes, suggested cached jobs, platform stats, and deduped logs
 - Job detail with breakdown radial + AI helpers (cover letter streaming, skill gap, interview prep)
 - Application Kanban (`@dnd-kit`) with drag-persist
 - Daily digest emails (React Email) with min-score threshold
@@ -45,6 +46,7 @@ See `lib/env.ts` for the full Zod schema. Get free keys from:
 | Cloudflare R2 | <https://dash.cloudflare.com> |
 
 Generate `AUTH_SECRET` and `CRON_SECRET` with `openssl rand -hex 32`.
+Set `ADMIN_EMAILS` and `ADMIN_PASSWORD` for the separate `/admin` login prompt.
 
 ## Scripts
 
@@ -73,7 +75,7 @@ Generate `AUTH_SECRET` and `CRON_SECRET` with `openssl rand -hex 32`.
 ```
 app/
   (auth)/            login, signup, verify, forgot-password
-  (app)/             dashboard, jobs/[id], resumes, applications, settings  (auth-gated)
+  (app)/             dashboard, jobs/[id], resumes, applications, settings, admin  (auth-gated)
   api/
     auth/[...all]    Better Auth handler
     cron/            fetch-jobs, send-alerts (Bearer CRON_SECRET)
@@ -99,7 +101,7 @@ proxy.ts             Auth gate + per-IP API rate limit (60/min)
 - PII redacted before any LLM call (`lib/llm/redact.ts`).
 - Rate limit on `/api/*` (60/IP/min) and AI endpoints (10/user/min).
 - Strict CSP-friendly security headers in `next.config.ts`.
-- TTL index on `Job.fetchedAt` purges stale jobs after 45 days.
+- TTL index on `Job.fetchedAt` purges stale jobs after 24 hours; the fetch cron also deletes stale jobs after successful ingestion.
 - Account delete cascades through Resume/Application/Match + R2 objects + auth tables.
 
 ## Acknowledgements

@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import { connectMongoose, getDb } from "@/lib/db";
 import { DigestEmail } from "@/lib/email/digest-template";
 import { env } from "@/lib/env";
+import { buildResumeJobProfile, jobMatchesProfile } from "@/lib/jobs/profile";
 import { score } from "@/lib/match/score";
 import { parsePrefs } from "@/lib/preferences";
 import { formatRelative, formatSalary } from "@/lib/utils";
@@ -55,11 +56,14 @@ export async function GET(req: NextRequest) {
         return;
       }
 
+      const profile = buildResumeJobProfile(resumes.map((resume) => resume.parsed as never));
       const ranked = recent
+        .filter((j) => jobMatchesProfile(profile, j as never))
         .map((j) => {
           const matches = resumes.map((r) =>
             score(r.parsed as never, j as never, {
               preferredLocations: prefs.preferredLocations,
+              roleProfile: profile,
             }),
           );
           return { j, m: matches.reduce((a, b) => (a.score >= b.score ? a : b)) };

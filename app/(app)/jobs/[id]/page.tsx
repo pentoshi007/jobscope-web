@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { connectMongoose } from "@/lib/db";
+import { buildResumeJobProfile } from "@/lib/jobs/profile";
 import { score } from "@/lib/match/score";
 import { requireSession } from "@/lib/session";
 import { formatRelative, formatSalary } from "@/lib/utils";
@@ -29,7 +30,10 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   }).lean();
 
   // Score against all active resumes, pick the best match
-  const matches = resumes.map((r) => score(r.parsed as never, job as never));
+  const matches = resumes.map((r) => {
+    const roleProfile = buildResumeJobProfile([r.parsed as never]);
+    return score(r.parsed as never, job as never, { roleProfile });
+  });
   const m =
     matches.length > 0
       ? matches.reduce((a, b) => (a.score >= b.score ? a : b))

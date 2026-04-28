@@ -1,4 +1,4 @@
-import mongoose, { Schema, type InferSchemaType } from "mongoose";
+import mongoose, { type InferSchemaType, Schema } from "mongoose";
 
 const SalarySchema = new Schema(
   {
@@ -40,7 +40,8 @@ const JobSchema = new Schema(
 
 JobSchema.index({ externalId: 1, source: 1 }, { unique: true });
 JobSchema.index({ title: "text", company: "text", description: "text" });
-JobSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 45 });
+JobSchema.index({ fetchedAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 });
+JobSchema.index({ extractedSkills: 1, fetchedAt: -1, postedAt: -1 });
 
 export type JobDoc = InferSchemaType<typeof JobSchema> & { _id: mongoose.Types.ObjectId };
 

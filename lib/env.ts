@@ -7,6 +7,8 @@ const schema = z.object({
   AUTH_GOOGLE_SECRET: z.string().min(1),
   AUTH_TRUST_HOST: z.string().optional(),
   CRON_SECRET: z.string().min(16),
+  ADMIN_EMAILS: z.string().optional().default(""),
+  ADMIN_PASSWORD: z.string().optional().default(""),
 
   GEMINI_API_KEY: z.string().min(1),
   GROQ_API_KEY: z.string().min(1),

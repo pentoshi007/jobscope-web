@@ -17,7 +17,7 @@ export function JobCard({ job, match }: { job: JobDoc; match: MatchResult }) {
   const missing = match.missingSkills.slice(0, 3);
 
   return (
-    <Card className="flex items-center gap-3 p-3 transition-all hover:shadow-[var(--shadow-pop)] sm:gap-5 sm:p-5">
+    <Card className="flex min-w-0 items-start gap-3 p-3 transition-all hover:shadow-[var(--shadow-pop)] sm:items-center sm:gap-5 sm:p-5">
       <div className="shrink-0">
         <ScoreDonut value={match.score} size={48} />
       </div>
@@ -27,16 +27,16 @@ export function JobCard({ job, match }: { job: JobDoc; match: MatchResult }) {
             {job.title}
           </h3>
           <span className="hidden text-xs text-[var(--color-fg-subtle)] sm:inline">·</span>
-          <span className="text-xs text-[var(--color-fg-muted)] sm:text-sm">
+          <span className="shrink-0 text-xs text-[var(--color-fg-muted)] sm:text-sm">
             {formatRelative(job.postedAt)}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-fg-muted)]">
-          <span className="inline-flex items-center gap-1">
+          <span className="inline-flex min-w-0 items-center gap-1">
             <Building2 className="h-3 w-3" /> {job.company}
           </span>
           {job.location && (
-            <span className="inline-flex items-center gap-1">
+            <span className="inline-flex min-w-0 items-center gap-1">
               <MapPin className="h-3 w-3" /> {job.location}
             </span>
           )}

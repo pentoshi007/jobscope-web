@@ -1,5 +1,5 @@
-import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
+import { type NextRequest, NextResponse } from "next/server";
 import { rateLimit } from "@/lib/rate-limit";
 
 const PROTECTED = ["/dashboard", "/jobs", "/resumes", "/applications", "/settings"];

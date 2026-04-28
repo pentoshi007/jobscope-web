@@ -12,6 +12,7 @@ export function MobileNav() {
   const pathname = usePathname();
 
   useEffect(() => {
+    void pathname;
     setOpen(false);
   }, [pathname]);
 
@@ -31,7 +32,7 @@ export function MobileNav() {
         aria-label="Open menu"
         aria-expanded={open}
         onClick={() => setOpen(true)}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-fg)] md:hidden"
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-fg)] shadow-sm hover:bg-[var(--color-bg-subtle)] md:hidden"
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -39,11 +40,11 @@ export function MobileNav() {
       {open && (
         <div className="fixed inset-0 z-[60] md:hidden">
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/65 backdrop-blur-sm"
             onClick={() => setOpen(false)}
             aria-hidden
           />
-          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-[var(--color-border)] bg-[var(--color-bg)] shadow-xl">
+          <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[88vw] flex-col border-r border-[var(--color-border)] bg-[var(--color-card)] shadow-xl">
             <div className="flex h-14 items-center justify-between px-5">
               <Link href="/dashboard" onClick={() => setOpen(false)}>
                 <Logo size={24} />
@@ -66,7 +67,7 @@ export function MobileNav() {
                     key={n.href}
                     href={n.href}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+                      "flex items-center gap-2.5 rounded-md px-2.5 py-2.5 text-sm transition-colors",
                       active
                         ? "bg-[var(--color-card)] font-medium text-[var(--color-fg)] shadow-sm"
                         : "text-[var(--color-fg-muted)] hover:bg-[var(--color-card)] hover:text-[var(--color-fg)]",

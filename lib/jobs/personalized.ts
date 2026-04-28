@@ -1,29 +1,17 @@
+import { Job } from "@/models/job";
 import { env } from "../env";
 import type { ParsedResume } from "../resume/schema";
 import { dedupeHash } from "./dedupe";
 import { quickSkillExtract } from "./enrich";
+import { buildResumeJobProfile, jobMatchesProfile, type ResumeJobProfile } from "./profile";
 import { inferSeniority, type NormalizedJob, stripHtml } from "./types";
-
-const ROLE_NORMALIZE: { match: RegExp; canonical: string }[] = [
-  { match: /\bfront[-\s]?end|react|vue|angular|svelte\b/i, canonical: "frontend developer" },
-  { match: /\bback[-\s]?end|node|python|java|golang|ruby|php\b/i, canonical: "backend developer" },
-  { match: /\bfull[-\s]?stack\b/i, canonical: "full stack developer" },
-  { match: /\bdev[-\s]?ops|sre|infrastructure|platform\b/i, canonical: "devops engineer" },
-  { match: /\bdata\s*(engineer|scientist|analyst)\b/i, canonical: "data engineer" },
-  { match: /\bmachine learning|ml engineer|ai\b/i, canonical: "machine learning engineer" },
-  {
-    match: /\bmobile|android|ios|swift|kotlin|flutter|react native\b/i,
-    canonical: "mobile developer",
-  },
-  { match: /\bqa|test|sdet\b/i, canonical: "qa engineer" },
-  { match: /\bdesign|ux|ui\b/i, canonical: "product designer" },
-];
 
 export interface PersonalizedQuery {
   keywords: string[];
   primaryRole: string;
   seniority: ParsedResume["inferredSeniority"];
   locations: string[];
+  profile: ResumeJobProfile;
 }
 
 export function buildPersonalizedQuery(
@@ -36,24 +24,21 @@ export function buildPersonalizedQuery(
       primaryRole: "software engineer",
       seniority: "mid",
       locations: preferredLocations,
+      profile: buildResumeJobProfile([]),
     };
   }
 
   const skillCount = new Map<string, number>();
-  const roleText: string[] = [];
-  let years = 0;
   let seniority: ParsedResume["inferredSeniority"] = "mid";
 
   for (const r of resumes) {
-    if (r.headline) roleText.push(r.headline);
-    for (const e of r.experience.slice(0, 3)) if (e.role) roleText.push(e.role);
-    years = Math.max(years, r.totalYearsExperience);
     seniority = r.inferredSeniority;
     const top = [
       ...r.skills.languages,
       ...r.skills.frameworks,
       ...r.skills.databases,
       ...r.skills.cloud,
+      ...r.skills.tools,
     ];
     for (const s of top) {
       const k = s.toLowerCase().trim();
@@ -67,17 +52,13 @@ export function buildPersonalizedQuery(
     .slice(0, 5)
     .map(([s]) => s);
 
-  let primaryRole = "software engineer";
-  const joined = roleText.join(" ");
-  for (const r of ROLE_NORMALIZE) {
-    if (r.match.test(joined)) {
-      primaryRole = r.canonical;
-      break;
-    }
-  }
+  const profile = buildResumeJobProfile(resumes);
+  const primaryRole = profile.queryRoles[0] ?? "software engineer";
+  const keywords = Array.from(
+    new Set([...profile.requiredTerms.slice(0, 4), ...topSkills.slice(0, 3), primaryRole]),
+  ).filter(Boolean);
 
-  const keywords = Array.from(new Set([...topSkills.slice(0, 3), primaryRole])).filter(Boolean);
-  return { keywords, primaryRole, seniority, locations: preferredLocations };
+  return { keywords, primaryRole, seniority, locations: preferredLocations, profile };
 }
 
 interface JoobleJobRaw {
@@ -145,7 +126,8 @@ async function fetchJoobleKeyword(query: PersonalizedQuery): Promise<NormalizedJ
         category: "",
         tags: [],
         seniority: inferSeniority(x.title),
-      }));
+      }))
+      .filter((job) => jobMatchesProfile(query.profile, job));
   } catch {
     return [];
   }
@@ -189,7 +171,8 @@ async function fetchAdzunaKeyword(query: PersonalizedQuery): Promise<NormalizedJ
           tags: [],
           seniority: inferSeniority(x.title),
         };
-      });
+      })
+      .filter((job) => jobMatchesProfile(query.profile, job));
   } catch {
     return [];
   }
@@ -216,22 +199,24 @@ async function fetchRemotiveFiltered(query: PersonalizedQuery): Promise<Normaliz
       const hay = `${x.title} ${x.tags?.join(" ") ?? ""} ${x.category}`.toLowerCase();
       return kw.some((k) => hay.includes(k));
     });
-    return filtered.map<NormalizedJob>((x) => ({
-      externalId: String(x.id),
-      source: "remotive",
-      title: x.title,
-      company: x.company_name,
-      location: x.candidate_required_location || "Remote",
-      remote: true,
-      workMode: "remote",
-      description: stripHtml(x.description ?? ""),
-      url: x.url,
-      postedAt: new Date(x.publication_date),
-      salary: { min: null, max: null, currency: null, period: null },
-      category: x.category ?? "",
-      tags: x.tags ?? [],
-      seniority: inferSeniority(x.title),
-    }));
+    return filtered
+      .map<NormalizedJob>((x) => ({
+        externalId: String(x.id),
+        source: "remotive",
+        title: x.title,
+        company: x.company_name,
+        location: x.candidate_required_location || "Remote",
+        remote: true,
+        workMode: "remote",
+        description: stripHtml(x.description ?? ""),
+        url: x.url,
+        postedAt: new Date(x.publication_date),
+        salary: { min: null, max: null, currency: null, period: null },
+        category: x.category ?? "",
+        tags: x.tags ?? [],
+        seniority: inferSeniority(x.title),
+      }))
+      .filter((job) => jobMatchesProfile(query.profile, job));
   } catch {
     return [];
   }
@@ -286,4 +271,42 @@ export function enrichForUpsert(jobs: NormalizedJob[]) {
       fetchedAt: new Date(),
     };
   });
+}
+
+export async function fetchAndStorePersonalizedJobs(
+  query: PersonalizedQuery,
+  opts: { allowAdzuna?: boolean } = {},
+) {
+  const summary: Record<string, { fetched: number; upserted: number; error?: string }> = {};
+
+  for await (const batch of streamPersonalizedJobs(query, opts)) {
+    const stat = { fetched: batch.jobs.length, upserted: 0 } as {
+      fetched: number;
+      upserted: number;
+      error?: string;
+    };
+    try {
+      if (batch.error) {
+        stat.error = batch.error;
+      } else if (batch.jobs.length) {
+        const docs = enrichForUpsert(batch.jobs);
+        const res = await Job.bulkWrite(
+          docs.map((d) => ({
+            updateOne: {
+              filter: { externalId: d.externalId, source: d.source },
+              update: { $set: d },
+              upsert: true,
+            },
+          })) as never,
+          { ordered: false },
+        );
+        stat.upserted = (res.upsertedCount ?? 0) + (res.modifiedCount ?? 0);
+      }
+    } catch (e) {
+      stat.error = e instanceof Error ? e.message : "unknown";
+    }
+    summary[batch.source] = stat;
+  }
+
+  return summary;
 }

@@ -57,6 +57,64 @@ export function StreamingFeed() {
   const [activeSources, setActiveSources] = useState<Set<string>>(new Set());
   const ctrlRef = useRef<AbortController | null>(null);
 
+  const handleSseBlock = useCallback((block: string) => {
+    let event = "message";
+    const dataLines: string[] = [];
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+    }
+    let data: Record<string, unknown> = {};
+    try {
+      data = JSON.parse(dataLines.join("\n") || "{}");
+    } catch {
+      return;
+    }
+    if (event === "status") {
+      const p = data.phase as Phase | undefined;
+      if (p) setPhase(p);
+      if (p === "starting") {
+        const q = (data.query as { keywords?: string[]; role?: string } | undefined) ?? {};
+        if (q.keywords?.length) setKeywords(q.keywords);
+        setStatusMsg("Loading stored matches...");
+      } else if (p === "scoring") {
+        setStatusMsg(`Scoring ${(data.count as number) ?? 0} stored jobs...`);
+      } else if (p === "fetching") {
+        setStatusMsg("Reaching out to job boards for fresh matches...");
+        setActiveSources(new Set(["remotive", "jooble"]));
+      } else if (p === "source-done") {
+        const src = data.source as string;
+        setActiveSources((prev) => {
+          const n = new Set(prev);
+          n.delete(src);
+          return n;
+        });
+        setStatusMsg(`${SOURCE_LABEL[src] ?? src} — added ${(data.added as number) ?? 0}`);
+      } else if (p === "source-error" || p === "source-empty") {
+        const src = data.source as string;
+        setActiveSources((prev) => {
+          const n = new Set(prev);
+          n.delete(src);
+          return n;
+        });
+      } else if (p === "cooldown") {
+        setStatusMsg((data.message as string) || "Cooling down to stay within free limits.");
+      } else if (p === "error") {
+        setStatusMsg((data.message as string) || "Something went wrong.");
+      }
+    } else if (event === "jobs") {
+      const incoming = (data.jobs as StreamJob[]) ?? [];
+      setJobs((prev) => mergeJobs(prev, incoming));
+    } else if (event === "done") {
+      setPhase("done");
+      const fetched = (data.fetched as number) ?? 0;
+      setStatusMsg(
+        fetched > 0 ? `Done. ${fetched} fresh matches added.` : "Done. Showing stored matches.",
+      );
+      setActiveSources(new Set());
+    }
+  }, []);
+
   const start = useCallback(() => {
     if (ctrlRef.current) ctrlRef.current.abort();
     const ctrl = new AbortController();
@@ -95,79 +153,19 @@ export function StreamingFeed() {
         setPhase("error");
         setStatusMsg(e instanceof Error ? e.message : "stream failed");
       });
-    // biome-ignore lint/correctness/useExhaustiveDependencies: handler is stable
-  }, []);
-
-  function handleSseBlock(block: string) {
-    let event = "message";
-    const dataLines: string[] = [];
-    for (const line of block.split("\n")) {
-      if (line.startsWith("event:")) event = line.slice(6).trim();
-      else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
-    }
-    let data: Record<string, unknown> = {};
-    try {
-      data = JSON.parse(dataLines.join("\n") || "{}");
-    } catch {
-      return;
-    }
-    if (event === "status") {
-      const p = data.phase as Phase | undefined;
-      if (p) setPhase(p);
-      if (p === "starting") {
-        const q = (data.query as { keywords?: string[]; role?: string } | undefined) ?? {};
-        if (q.keywords?.length) setKeywords(q.keywords);
-        setStatusMsg("Looking up your matches...");
-      } else if (p === "scoring") {
-        setStatusMsg(`Scanning ${(data.count as number) ?? 0} jobs in your library...`);
-      } else if (p === "fetching") {
-        setStatusMsg("Reaching out to job boards for fresh matches...");
-        setActiveSources(new Set(["remotive", "jooble"]));
-      } else if (p === "source-done") {
-        const src = data.source as string;
-        setActiveSources((prev) => {
-          const n = new Set(prev);
-          n.delete(src);
-          return n;
-        });
-        setStatusMsg(`${SOURCE_LABEL[src] ?? src} — added ${(data.added as number) ?? 0}`);
-      } else if (p === "source-error" || p === "source-empty") {
-        const src = data.source as string;
-        setActiveSources((prev) => {
-          const n = new Set(prev);
-          n.delete(src);
-          return n;
-        });
-      } else if (p === "cooldown") {
-        setStatusMsg((data.message as string) || "Cooling down to stay within free limits.");
-      } else if (p === "error") {
-        setStatusMsg((data.message as string) || "Something went wrong.");
-      }
-    } else if (event === "jobs") {
-      const incoming = (data.jobs as StreamJob[]) ?? [];
-      setJobs((prev) => mergeJobs(prev, incoming));
-    } else if (event === "done") {
-      setPhase("done");
-      const fetched = (data.fetched as number) ?? 0;
-      setStatusMsg(
-        fetched > 0 ? `Done. ${fetched} fresh matches added.` : "Done. Showing your top matches.",
-      );
-      setActiveSources(new Set());
-    }
-  }
+  }, [handleSseBlock]);
 
   useEffect(() => {
     start();
-    if (sp.get("refresh")) {
-      const next = new URLSearchParams(sp);
+    const next = new URLSearchParams(window.location.search);
+    if (next.get("refresh")) {
       next.delete("refresh");
       router.replace(`/dashboard${next.toString() ? `?${next.toString()}` : ""}`);
     }
     return () => {
       ctrlRef.current?.abort();
     };
-    // biome-ignore lint/correctness/useExhaustiveDependencies: run once on mount
-  }, []);
+  }, [router, start]);
 
   const isRunning =
     phase !== "done" && phase !== "idle" && phase !== "error" && phase !== "cooldown";
@@ -321,7 +319,7 @@ function StreamCard({ job }: { job: StreamJob }) {
   const missing = job.match.missingSkills.slice(0, 3);
 
   return (
-    <Card className="flex items-center gap-3 p-3 transition-all hover:shadow-[var(--shadow-pop)] sm:gap-5 sm:p-5">
+    <Card className="flex min-w-0 items-start gap-3 p-3 transition-all hover:shadow-[var(--shadow-pop)] sm:items-center sm:gap-5 sm:p-5">
       <div className="shrink-0">
         <ScoreDonut value={job.match.score} size={48} />
       </div>
@@ -331,16 +329,16 @@ function StreamCard({ job }: { job: StreamJob }) {
             {job.title}
           </h3>
           <span className="hidden text-xs text-[var(--color-fg-subtle)] sm:inline">·</span>
-          <span className="text-xs text-[var(--color-fg-muted)] sm:text-sm">
+          <span className="shrink-0 text-xs text-[var(--color-fg-muted)] sm:text-sm">
             {formatRelative(new Date(job.postedAt))}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-fg-muted)]">
-          <span className="inline-flex items-center gap-1">
+          <span className="inline-flex min-w-0 items-center gap-1">
             <Building2 className="h-3 w-3" /> {job.company}
           </span>
           {job.location && (
-            <span className="inline-flex items-center gap-1">
+            <span className="inline-flex min-w-0 items-center gap-1">
               <MapPin className="h-3 w-3" /> {job.location}
             </span>
           )}
