@@ -10,7 +10,7 @@ declare global {
   // eslint-disable-next-line no-var
   var _mongoClient: MongoClient | undefined;
   // eslint-disable-next-line no-var
-  var _mongoClientPromise: Promise<MongoClient> | undefined;
+  var _mongoClientPromise: Promise<MongoClient> | null | undefined;
 }
 
 const cache = global._mongooseCache ?? { conn: null, promise: null };
@@ -23,10 +23,15 @@ export async function connectMongoose(): Promise<typeof mongoose> {
       .connect(env.MONGODB_URI, {
         bufferCommands: false,
         maxPoolSize: 10,
-        minPoolSize: 1,
-        serverSelectionTimeoutMS: 5000,
+        minPoolSize: 0,
+        serverSelectionTimeoutMS: 10000,
       })
-      .then((m) => m);
+      .then((m) => m)
+      .catch((error) => {
+        cache.promise = null;
+        cache.conn = null;
+        throw error;
+      });
   }
   cache.conn = await cache.promise;
   return cache.conn;
@@ -36,17 +41,24 @@ function getClient(): MongoClient {
   if (!global._mongoClient) {
     global._mongoClient = new MongoClient(env.MONGODB_URI, {
       maxPoolSize: 10,
-      minPoolSize: 1,
-      serverSelectionTimeoutMS: 5000,
+      minPoolSize: 0,
+      serverSelectionTimeoutMS: 10000,
     });
-    global._mongoClientPromise = global._mongoClient.connect();
   }
   return global._mongoClient;
 }
 
 export const mongoClient = getClient();
-export const mongoClientPromise: Promise<MongoClient> =
-  global._mongoClientPromise ?? mongoClient.connect();
+
+export function getMongoClient(): Promise<MongoClient> {
+  if (!global._mongoClientPromise) {
+    global._mongoClientPromise = mongoClient.connect().catch((error) => {
+      global._mongoClientPromise = null;
+      throw error;
+    });
+  }
+  return global._mongoClientPromise;
+}
 
 export function getDb() {
   return mongoClient.db();

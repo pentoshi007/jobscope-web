@@ -114,6 +114,11 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
               <CardTitle className="text-base">Match breakdown</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {m.reasons.length > 0 && (
+                <div className="rounded-md border border-[var(--color-warning)] bg-[var(--color-warning-soft)] p-3 text-xs text-[var(--color-warning)]">
+                  {m.reasons[0]}
+                </div>
+              )}
               {Object.entries(m.breakdown).map(([k, v]) => (
                 <Bar
                   key={k}

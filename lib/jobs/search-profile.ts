@@ -31,8 +31,10 @@ ${PROFILE_SCHEMA_DOC}
 Rules:
 - Infer the candidate's dominant job track from headline, summary, recent roles, years of experience, certifications, and repeated project/work evidence.
 - Skills that appear only once, old work, side projects, or "also familiar with" items are supporting, not primary.
-- If the resume spans multiple tracks, rank them. Put the strongest track in primaryRole and targetTitles. Put credible but secondary tracks in secondaryTitles.
-- Put roles that would distract job search in avoidTitles. Example: for a cybersecurity-focused resume that mentions web development secondarily, avoid full-stack/frontend/backend developer roles.
+- targetTitles must all belong to the primaryRole family. Do not put internships or unrelated secondary tracks in targetTitles unless the primaryRole itself is an internship track.
+- If the resume spans multiple tracks, rank them. Put the strongest track in primaryRole and targetTitles. Put credible but secondary tracks only in secondaryTitles.
+- Put roles that would distract job search in avoidTitles. Do not put adjacent variants of the primary role in avoidTitles; for example, if primaryRole is Full-Stack Developer, frontend/backend/web/software roles are adjacent, not filtered out.
+- requiredSkills must be evidenced by the resume and important for the primaryRole. Put less certain or secondary-track skills in preferredSkills/supportingSkills.
 - Build searchQueries as 3 to 5 short phrases that job APIs can search directly. Prefer role/domain phrases over raw skills.
 - keywords should support filtering and ranking. Include domain-specific tools and skills, not generic words.
 - negativeKeywords should include terms that commonly cause bad matches for the primaryRole.
@@ -242,10 +244,31 @@ function normalizeProfile(raw: unknown, source: JobSearchProfile["source"], resu
 
   const fallback = buildHeuristicJobSearchProfile(resume);
   const profile = parsed.data;
-  const targetTitles = cleanList(profile.targetTitles);
-  const primaryRole = cleanTitle(profile.primaryRole) || targetTitles[0] || fallback.primaryRole;
-  const requiredSkills = cleanList(profile.requiredSkills);
-  const preferredSkills = cleanList(profile.preferredSkills);
+  const rawTargetTitles = cleanList(profile.targetTitles);
+  const primaryRole = cleanTitle(profile.primaryRole) || rawTargetTitles[0] || fallback.primaryRole;
+  const targetTitles = unique([primaryRole, ...rawTargetTitles, ...fallback.targetTitles])
+    .filter((title) => compatibleTitle(primaryRole, title))
+    .slice(0, 8);
+  const incompatibleTargets = rawTargetTitles.filter(
+    (title) => !compatibleTitle(primaryRole, title),
+  );
+  const secondaryTitles = unique([
+    ...cleanList(profile.secondaryTitles),
+    ...incompatibleTargets,
+  ]).filter((title) => normalizeComparable(title) !== normalizeComparable(primaryRole));
+  const avoidTitles = cleanList(profile.avoidTitles).filter(
+    (title) => !adjacentToPrimary(primaryRole, title, targetTitles),
+  );
+  const evidence = resumeEvidenceText(resume);
+  const requiredSkills = evidenceBacked(
+    cleanList(profile.requiredSkills),
+    evidence,
+    fallback.requiredSkills,
+  );
+  const preferredSkills = unique([
+    ...evidenceBacked(cleanList(profile.preferredSkills), evidence, fallback.preferredSkills),
+    ...cleanList(profile.requiredSkills).filter((skill) => !requiredSkills.includes(skill)),
+  ]);
 
   return JobSearchProfileSchema.parse({
     ...profile,
@@ -259,11 +282,9 @@ function normalizeProfile(raw: unknown, source: JobSearchProfile["source"], resu
       }))
       .filter((family) => family.label)
       .slice(0, 5),
-    targetTitles: unique([primaryRole, ...targetTitles, ...fallback.targetTitles])
-      .slice(0, 8)
-      .map(titleCase),
-    secondaryTitles: cleanList(profile.secondaryTitles).slice(0, 6).map(titleCase),
-    avoidTitles: cleanList(profile.avoidTitles).slice(0, 8).map(titleCase),
+    targetTitles: targetTitles.map(titleCase),
+    secondaryTitles: secondaryTitles.slice(0, 6).map(titleCase),
+    avoidTitles: avoidTitles.slice(0, 8).map(titleCase),
     requiredSkills: unique([...requiredSkills, ...fallback.requiredSkills]).slice(0, 12),
     preferredSkills: unique([...preferredSkills, ...fallback.preferredSkills]).slice(0, 14),
     supportingSkills: cleanList(profile.supportingSkills).slice(0, 14),
@@ -273,6 +294,7 @@ function normalizeProfile(raw: unknown, source: JobSearchProfile["source"], resu
         : targetTitles),
       primaryRole,
     ])
+      .filter((query) => compatibleTitle(primaryRole, query))
       .slice(0, 5)
       .map(titleCase),
     keywords: unique([...cleanList(profile.keywords), ...requiredSkills, ...preferredSkills]).slice(
@@ -332,6 +354,120 @@ function cleanTitle(value: string) {
     .replace(/\s+/g, " ")
     .replace(/^[^a-z0-9]+|[^a-z0-9+#.)]+$/gi, "")
     .trim();
+}
+
+function compatibleTitle(primary: string, candidate: string) {
+  const p = meaningfulTokens(primary);
+  const c = meaningfulTokens(candidate);
+  if (normalizeComparable(primary) === normalizeComparable(candidate)) return true;
+  if (p.length === 0 || c.length === 0) return false;
+
+  const overlap = c.filter((token) => p.includes(token)).length;
+  if (overlap / Math.min(p.length, c.length) >= 0.45) return true;
+
+  const primarySoftware = p.some((token) => SOFTWARE_FAMILY.has(token));
+  const candidateSoftware = c.some((token) => SOFTWARE_FAMILY.has(token));
+  if (primarySoftware && candidateSoftware) return true;
+
+  return false;
+}
+
+function adjacentToPrimary(primary: string, candidate: string, targetTitles: string[]) {
+  if (compatibleTitle(primary, candidate)) return true;
+  const candidateHead = roleHead(candidate);
+  if (candidateHead && candidateHead === roleHead(primary)) return true;
+  return targetTitles.some((title) => compatibleTitle(title, candidate));
+}
+
+const ROLE_HEADS = new Set([
+  "developer",
+  "engineer",
+  "analyst",
+  "manager",
+  "designer",
+  "editor",
+  "consultant",
+  "specialist",
+  "administrator",
+  "architect",
+  "accountant",
+  "associate",
+]);
+
+const SOFTWARE_FAMILY = new Set([
+  "software",
+  "developer",
+  "engineer",
+  "programmer",
+  "full",
+  "stack",
+  "frontend",
+  "backend",
+  "front",
+  "back",
+  "web",
+  "react",
+  "node",
+  "javascript",
+  "typescript",
+]);
+
+const TITLE_STOP = new Set([
+  "junior",
+  "jr",
+  "senior",
+  "sr",
+  "lead",
+  "staff",
+  "principal",
+  "intern",
+  "internship",
+  "trainee",
+  "entry",
+  "level",
+]);
+
+function meaningfulTokens(value: string) {
+  return normalizeComparable(value)
+    .split(" ")
+    .filter((token) => token.length > 1 && !TITLE_STOP.has(token));
+}
+
+function roleHead(value: string) {
+  return meaningfulTokens(value).find((token) => ROLE_HEADS.has(token)) ?? "";
+}
+
+function normalizeComparable(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9+#.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function evidenceBacked(values: string[], evidence: string, fallback: string[]) {
+  const fallbackSet = new Set(fallback.map(normalizeComparable));
+  return unique(
+    values.filter((value) => {
+      const normalized = normalizeComparable(value);
+      return (
+        fallbackSet.has(normalized) || (normalized.length > 1 && evidence.includes(normalized))
+      );
+    }),
+  );
+}
+
+function resumeEvidenceText(resume: ParsedResume) {
+  return normalizeComparable(
+    [
+      resume.headline,
+      resume.summary,
+      ...allResumeSkills(resume),
+      ...resume.experience.flatMap((e) => [e.role, e.description, ...(e.skills ?? [])]),
+      ...resume.projects.flatMap((p) => [p.name, p.description, ...(p.skills ?? [])]),
+      ...resume.certifications.map((c) => c.name),
+    ].join(" "),
+  );
 }
 
 function normalizeSkill(value: string) {

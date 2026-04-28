@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { hasCountrySignal } from "@/lib/match/location";
 import type { ParsedResume } from "@/lib/resume/schema";
 import { deleteResume, toggleActiveResume, updateParsedResume } from "../actions";
 
@@ -30,6 +31,10 @@ export function ResumeEditor({
   }
 
   function save() {
+    if (!hasCountrySignal(parsed.location)) {
+      toast.error("Add your location with country before saving.");
+      return;
+    }
     startTransition(async () => {
       const res = await updateParsedResume(id, parsed as unknown as Record<string, unknown>);
       if (!res.ok) {
@@ -84,7 +89,7 @@ export function ResumeEditor({
             <Field label="Email" value={parsed.email} onChange={(v) => update("email", v)} />
             <Field label="Phone" value={parsed.phone} onChange={(v) => update("phone", v)} />
             <Field
-              label="Location"
+              label="Location (country required)"
               value={parsed.location}
               onChange={(v) => update("location", v)}
             />
@@ -413,8 +418,14 @@ function JobSearchProfileCard({ parsed }: { parsed: ParsedResume }) {
             {profile.targetTitles.length > 0 && (
               <ProfilePills label="Targets" items={profile.targetTitles.slice(0, 5)} />
             )}
+            {profile.searchQueries.length > 0 && (
+              <ProfilePills label="Search queries" items={profile.searchQueries.slice(0, 5)} />
+            )}
             {profile.requiredSkills.length > 0 && (
               <ProfilePills label="Core skills" items={profile.requiredSkills.slice(0, 6)} mono />
+            )}
+            {profile.secondaryTitles.length > 0 && (
+              <ProfilePills label="Secondary" items={profile.secondaryTitles.slice(0, 4)} />
             )}
             {profile.avoidTitles.length > 0 && (
               <ProfilePills label="Filtered out" items={profile.avoidTitles.slice(0, 4)} />
@@ -503,7 +514,10 @@ function Field({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const id = label.toLowerCase().replace(/\s+/g, "-");
+  const id = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
   return (
     <div className="space-y-1">
       <Label htmlFor={id}>{label}</Label>

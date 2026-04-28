@@ -6,6 +6,7 @@ import { errorToLog, logAppEvent } from "@/lib/app-log";
 import { connectMongoose } from "@/lib/db";
 import { buildPersonalizedQuery, fetchAndStorePersonalizedJobs } from "@/lib/jobs/personalized";
 import { buildAiJobSearchProfile } from "@/lib/jobs/search-profile";
+import { hasCountrySignal } from "@/lib/match/location";
 import { deleteObject, putResume } from "@/lib/r2";
 import { extractText } from "@/lib/resume/extract";
 import { parseResume } from "@/lib/resume/parse";
@@ -131,6 +132,13 @@ export async function updateParsedResume(
   if (!doc) return { ok: false, error: "Resume not found" };
 
   const parsed = ParsedResumeSchema.parse(patch);
+  if (!hasCountrySignal(parsed.location)) {
+    return {
+      ok: false,
+      error:
+        "Add your location with country before saving, e.g. Bengaluru, India or Chicago, IL, United States.",
+    };
+  }
   const jobSearchProfile = await buildAiJobSearchProfile(parsed, doc.rawText ?? "");
   const nextParsed = { ...parsed, jobSearchProfile };
 

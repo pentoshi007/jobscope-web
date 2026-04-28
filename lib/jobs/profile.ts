@@ -115,12 +115,22 @@ export function buildResumeJobProfile(resumes: ParsedResume[]): ResumeJobProfile
     if (hasStored) {
       source = stored.source;
       primaryFromProfile ||= stored.primaryRole;
+      const targetTitles = unique([stored.primaryRole, ...stored.targetTitles]).filter((title) =>
+        compatibleTitle(stored.primaryRole, title),
+      );
+      const secondaryTitles = unique([
+        ...stored.secondaryTitles,
+        ...stored.targetTitles.filter((title) => !compatibleTitle(stored.primaryRole, title)),
+      ]);
+      const avoidTitles = stored.avoidTitles.filter(
+        (title) => !adjacentToPrimary(stored.primaryRole, title, targetTitles),
+      );
       addTitle(titleScores, weightedTerms, stored.primaryRole, 28);
-      for (const title of stored.targetTitles) addTitle(titleScores, weightedTerms, title, 22);
-      for (const title of stored.secondaryTitles) {
+      for (const title of targetTitles) addTitle(titleScores, weightedTerms, title, 22);
+      for (const title of secondaryTitles) {
         addSecondaryTitle(secondaryScores, weightedTerms, title, 8);
       }
-      for (const title of stored.avoidTitles) addAvoidTitle(avoidScores, title);
+      for (const title of avoidTitles) addAvoidTitle(avoidScores, title);
       addListTerms(weightedTerms, stored.requiredSkills, 9, "skill");
       addListTerms(weightedTerms, stored.preferredSkills, 5, "skill");
       addListTerms(weightedTerms, stored.supportingSkills, 1.5, "skill");
@@ -501,6 +511,93 @@ function phraseMatch(haystack: string, needle: string) {
   const haystackTokens = new Set(tokens(haystack));
   const matched = needleTokens.filter((token) => haystackTokens.has(token)).length;
   return matched / needleTokens.length >= 0.7;
+}
+
+function compatibleTitle(primary: string, candidate: string) {
+  const p = comparableTokens(primary);
+  const c = comparableTokens(candidate);
+  if (normalizeComparable(primary) === normalizeComparable(candidate)) return true;
+  if (p.length === 0 || c.length === 0) return false;
+
+  const overlap = c.filter((token) => p.includes(token)).length;
+  if (overlap / Math.min(p.length, c.length) >= 0.45) return true;
+
+  const primarySoftware = p.some((token) => SOFTWARE_FAMILY.has(token));
+  const candidateSoftware = c.some((token) => SOFTWARE_FAMILY.has(token));
+  return primarySoftware && candidateSoftware;
+}
+
+function adjacentToPrimary(primary: string, candidate: string, targetTitles: string[]) {
+  if (compatibleTitle(primary, candidate)) return true;
+  const candidateHead = roleHead(candidate);
+  if (candidateHead && candidateHead === roleHead(primary)) return true;
+  return targetTitles.some((title) => compatibleTitle(title, candidate));
+}
+
+const ROLE_HEADS = new Set([
+  "developer",
+  "engineer",
+  "analyst",
+  "manager",
+  "designer",
+  "editor",
+  "consultant",
+  "specialist",
+  "administrator",
+  "architect",
+  "accountant",
+  "associate",
+]);
+
+const SOFTWARE_FAMILY = new Set([
+  "software",
+  "developer",
+  "engineer",
+  "programmer",
+  "full",
+  "stack",
+  "frontend",
+  "backend",
+  "front",
+  "back",
+  "web",
+  "react",
+  "node",
+  "javascript",
+  "typescript",
+]);
+
+const TITLE_STOP = new Set([
+  "junior",
+  "jr",
+  "senior",
+  "sr",
+  "lead",
+  "staff",
+  "principal",
+  "intern",
+  "internship",
+  "trainee",
+  "entry",
+  "level",
+]);
+
+function comparableTokens(value: string) {
+  return normalizeComparable(value)
+    .split(" ")
+    .filter((token) => token.length > 1 && !TITLE_STOP.has(token));
+}
+
+function roleHead(value: string) {
+  return comparableTokens(value).find((token) => ROLE_HEADS.has(token)) ?? "";
+}
+
+function normalizeComparable(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9+#.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function looksLikeRole(value: string) {

@@ -1,7 +1,7 @@
 import type { JobDoc } from "@/models/job";
 import { type ResumeJobProfile, roleFitDetails } from "../jobs/profile";
 import { type ParsedResume, ParsedResumeSchema } from "../resume/schema";
-import { locationsMatch } from "./location";
+import { analyzeLocation } from "./location";
 import { isAdjacent } from "./seniority";
 
 export interface MatchResult {
@@ -16,6 +16,7 @@ export interface MatchResult {
   };
   matchedSkills: string[];
   missingSkills: string[];
+  reasons: string[];
 }
 
 const STOP = new Set([
@@ -156,11 +157,13 @@ export function score(
           ? 6
           : 1;
 
-  const locationScore = job.remote
-    ? 10
-    : locationsMatch(safeResume.location, job.location, prefs.preferredLocations)
-      ? 10
-      : 2;
+  const location = analyzeLocation(
+    safeResume.location,
+    job.location,
+    Boolean(job.remote),
+    prefs.preferredLocations,
+  );
+  const locationScore = job.remote ? 10 : location.countryMismatch ? 0 : location.matched ? 10 : 4;
 
   const targetYears =
     job.seniority === "junior"
@@ -193,8 +196,19 @@ export function score(
     if (missing.length >= Math.max(1, matched.length)) cap = Math.min(cap, 78);
   }
   if (fit && !fit.strongTitleMatch && matched.length === 0) cap = Math.min(cap, 49);
+  if (location.countryMismatch) cap = Math.min(cap, 62);
 
   const finalScore = Math.min(cap, Math.round(rawScore));
+  const reasons = [
+    location.countryMismatch ? location.reason : "",
+    fit?.avoidTitleMatch && !fit.strongTitleMatch
+      ? "Role family does not match the resume focus."
+      : "",
+    fit?.secondaryOnly ? "This is a secondary track for this resume." : "",
+    jobSkills.size > 0 && skillCoverage < 0.5
+      ? `Missing ${missing.length} of ${jobSkills.size} detected job skills.`
+      : "",
+  ].filter(Boolean);
 
   return {
     score: Math.max(0, Math.min(100, finalScore)),
@@ -208,5 +222,6 @@ export function score(
     },
     matchedSkills: matched,
     missingSkills: missing,
+    reasons,
   };
 }

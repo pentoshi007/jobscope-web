@@ -25,7 +25,12 @@ interface StreamJob {
     currency: string | null;
     period: string | null;
   } | null;
-  match: { score: number; matchedSkills: string[]; missingSkills: string[] };
+  match: {
+    score: number;
+    matchedSkills: string[];
+    missingSkills: string[];
+    reasons?: string[];
+  };
 }
 
 type Phase =
@@ -318,6 +323,7 @@ function StreamCard({ job }: { job: StreamJob }) {
   );
   const matched = job.match.matchedSkills.slice(0, 5);
   const missing = job.match.missingSkills.slice(0, 3);
+  const reason = job.match.reasons?.[0];
 
   return (
     <Card className="flex min-w-0 items-start gap-3 p-3 transition-all hover:shadow-[var(--shadow-pop)] sm:items-center sm:gap-5 sm:p-5">
@@ -365,6 +371,7 @@ function StreamCard({ job }: { job: StreamJob }) {
             </Badge>
           ))}
         </div>
+        {reason && <p className="text-xs text-[var(--color-warning)]">{reason}</p>}
       </div>
     </Card>
   );

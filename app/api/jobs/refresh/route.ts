@@ -46,6 +46,7 @@ function jobToWire(job: JobDoc, m: ReturnType<typeof score>) {
       score: m.score,
       matchedSkills: m.matchedSkills.slice(0, 8),
       missingSkills: m.missingSkills.slice(0, 5),
+      reasons: m.reasons.slice(0, 3),
     },
   };
 }

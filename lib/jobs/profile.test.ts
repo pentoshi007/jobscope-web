@@ -7,7 +7,7 @@ describe("resume job profile matching", () => {
   it("keeps a cybersecurity resume from matching full-stack roles as primary jobs", () => {
     const resume = ParsedResumeSchema.parse({
       headline: "Dedicated Cybersecurity Analyst",
-      location: "Chicago, IL",
+      location: "Chicago, IL, United States",
       totalYearsExperience: 2,
       inferredSeniority: "mid",
       skills: {
@@ -68,5 +68,83 @@ describe("resume job profile matching", () => {
     expect(score(resume, fullStackJob, { roleProfile: profile }).score).toBeLessThan(30);
     expect(jobMatchesProfile(profile, securityJob)).toBe(true);
     expect(score(resume, securityJob, { roleProfile: profile }).score).toBeGreaterThanOrEqual(80);
+  });
+
+  it("does not filter adjacent software roles from a full-stack resume", () => {
+    const resume = ParsedResumeSchema.parse({
+      headline: "Full-Stack Developer",
+      location: "Bengaluru, India",
+      totalYearsExperience: 1,
+      inferredSeniority: "junior",
+      skills: {
+        languages: ["JavaScript", "TypeScript"],
+        frameworks: ["React", "Node.js", "Express.js"],
+        tools: [],
+        databases: ["MongoDB"],
+        cloud: [],
+        soft: [],
+      },
+      jobSearchProfile: {
+        primaryRole: "Full-Stack Developer",
+        targetTitles: ["Full-Stack Developer", "Software Engineer", "Cybersecurity Intern"],
+        secondaryTitles: ["Cybersecurity Intern"],
+        avoidTitles: ["Web Developer", "Frontend Developer", "Backend Developer"],
+        requiredSkills: ["JavaScript", "TypeScript", "React", "Node.js"],
+        preferredSkills: ["Express.js", "MongoDB"],
+        supportingSkills: [],
+        searchQueries: ["Full-Stack Developer", "Software Engineer"],
+        keywords: [],
+        negativeKeywords: [],
+        source: "ai",
+      },
+    });
+
+    const profile = buildResumeJobProfile([resume]);
+
+    expect(profile.titles).toContain("full-stack developer");
+    expect(profile.avoidTitles).not.toContain("frontend developer");
+    expect(profile.titles).not.toContain("cybersecurity intern");
+  });
+
+  it("caps non-remote jobs in a different country and explains why", () => {
+    const resume = ParsedResumeSchema.parse({
+      headline: "Data Analyst",
+      location: "Mumbai, India",
+      totalYearsExperience: 3,
+      inferredSeniority: "mid",
+      skills: {
+        languages: ["Python", "SQL"],
+        frameworks: [],
+        tools: ["Tableau"],
+        databases: [],
+        cloud: [],
+        soft: [],
+      },
+      jobSearchProfile: {
+        primaryRole: "Data Analyst",
+        targetTitles: ["Data Analyst"],
+        requiredSkills: ["Python", "SQL"],
+        preferredSkills: ["Tableau"],
+        searchQueries: ["Data Analyst"],
+        source: "ai",
+      },
+    });
+    const profile = buildResumeJobProfile([resume]);
+    const result = score(
+      resume,
+      {
+        title: "Data Analyst",
+        description: "Analyze dashboards with Python, SQL, and Tableau.",
+        extractedSkills: ["python", "sql", "tableau"],
+        seniority: "mid",
+        location: "Chicago, IL",
+        remote: false,
+        postedAt: new Date(),
+      },
+      { roleProfile: profile },
+    );
+
+    expect(result.score).toBeLessThanOrEqual(62);
+    expect(result.reasons[0]).toContain("Different country");
   });
 });
