@@ -52,16 +52,29 @@ const SOURCE_LABEL: Record<string, string> = {
   adzuna: "Adzuna",
 };
 
+// Session-level cache: persists across mounts while the tab is alive.
+// Avoids re-fetching when the user navigates away and comes back.
+let _cachedJobs: StreamJob[] | null = null;
+let _cachedAt = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 export function StreamingFeed() {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
-  const [jobs, setJobs] = useState<StreamJob[]>([]);
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [statusMsg, setStatusMsg] = useState<string>("");
+  const [jobs, setJobs] = useState<StreamJob[]>(_cachedJobs ?? []);
+  const [phase, setPhase] = useState<Phase>(
+    _cachedJobs && Date.now() - _cachedAt < CACHE_TTL_MS ? "done" : "idle",
+  );
+  const [statusMsg, setStatusMsg] = useState<string>(
+    _cachedJobs && Date.now() - _cachedAt < CACHE_TTL_MS
+      ? `${_cachedJobs.length} matches ready`
+      : "",
+  );
   const [keywords, setKeywords] = useState<string[]>([]);
   const [activeSources, setActiveSources] = useState<Set<string>>(new Set());
   const ctrlRef = useRef<AbortController | null>(null);
+  const hasRunRef = useRef(false);
 
   const handleSseBlock = useCallback((block: string) => {
     let event = "message";
@@ -110,7 +123,13 @@ export function StreamingFeed() {
       }
     } else if (event === "jobs") {
       const incoming = (data.jobs as StreamJob[]) ?? [];
-      setJobs((prev) => mergeJobs(prev, incoming));
+      setJobs((prev) => {
+        const merged = mergeJobs(prev, incoming);
+        // Update session cache
+        _cachedJobs = merged;
+        _cachedAt = Date.now();
+        return merged;
+      });
     } else if (event === "done") {
       setPhase("done");
       const fetched = (data.fetched as number) ?? 0;
@@ -161,8 +180,16 @@ export function StreamingFeed() {
       });
   }, [handleSseBlock]);
 
+  // Only auto-fetch on the very first mount if there's no cached data.
   useEffect(() => {
+    if (hasRunRef.current) return;
+    hasRunRef.current = true;
+
+    // If we have fresh cached data, skip the fetch
+    if (_cachedJobs && Date.now() - _cachedAt < CACHE_TTL_MS) return;
+
     start();
+
     const next = new URLSearchParams(window.location.search);
     if (next.get("refresh")) {
       next.delete("refresh");
@@ -329,7 +356,18 @@ const StreamCard = memo(function StreamCard({ job }: { job: StreamJob }) {
   );
   const matched = job.match.matchedSkills.slice(0, 5);
   const missing = job.match.missingSkills.slice(0, 3);
-  const reason = job.match.reasons?.[0];
+  const reasons = job.match.reasons ?? [];
+
+  // Categorise reasons for display
+  const warnings = reasons.filter(
+    (r) => r.includes("unavailable") || r.includes("may be filled") || r.includes("ago"),
+  );
+  const positives = reasons.filter(
+    (r) => r.startsWith("Matches") || r === "Recently posted.",
+  );
+  const neutrals = reasons.filter(
+    (r) => !warnings.includes(r) && !positives.includes(r),
+  );
 
   return (
     <Card className="flex min-w-0 items-start gap-3 p-3 transition-all hover:shadow-[var(--shadow-pop)] sm:items-center sm:gap-5 sm:p-5">
@@ -377,7 +415,19 @@ const StreamCard = memo(function StreamCard({ job }: { job: StreamJob }) {
             </Badge>
           ))}
         </div>
-        {reason && <p className="text-xs text-[var(--color-warning)]">{reason}</p>}
+        {(warnings.length > 0 || positives.length > 0 || neutrals.length > 0) && (
+          <div className="space-y-0.5 text-xs">
+            {warnings.map((r, i) => (
+              <p key={`w-${i}`} className="text-[var(--color-warning)]">⚠ {r}</p>
+            ))}
+            {positives.map((r, i) => (
+              <p key={`p-${i}`} className="text-[var(--color-success)]">✓ {r}</p>
+            ))}
+            {neutrals.map((r, i) => (
+              <p key={`n-${i}`} className="text-[var(--color-fg-muted)]">• {r}</p>
+            ))}
+          </div>
+        )}
       </div>
     </Card>
   );

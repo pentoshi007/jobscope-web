@@ -46,6 +46,7 @@ export function rankJobsForUser<TJob extends RankableJob>(
   const minScore = opts.minScore ?? 30;
   const targetMinScore = opts.targetMinScore ?? Math.max(20, minScore - 10);
   const limit = opts.limit ?? 60;
+  const MAX_AGE_DAYS = 90;
   const ranked = jobs
     .map((job) => {
       const matches = resumes.map((resume) =>
@@ -55,14 +56,22 @@ export function rankJobsForUser<TJob extends RankableJob>(
         }),
       );
       const m = matches.reduce((a, b) => (a.score >= b.score ? a : b));
+      // Strong recency multiplier: fresh jobs get full weight, old ones decay
+      const days = (Date.now() - new Date(job.postedAt).getTime()) / 86_400_000;
+      const freshness =
+        days <= 7 ? 1.0 : days <= 21 ? 0.95 : days <= 45 ? 0.75 : Math.max(0.4, 1 - days / MAX_AGE_DAYS);
       return {
         j: job,
         m,
         bucket: bucketFor(job, targetCountry),
-        sortScore: m.score + Math.min(10, Math.max(0, (job.sourceQuality ?? 50) / 10)),
+        sortScore:
+          (m.score + Math.min(10, Math.max(0, (job.sourceQuality ?? 50) / 10))) * freshness,
       };
     })
     .filter(({ j, m, bucket }) => {
+      // Exclude jobs older than MAX_AGE_DAYS entirely
+      const days = (Date.now() - new Date(j.postedAt).getTime()) / 86_400_000;
+      if (days > MAX_AGE_DAYS) return false;
       const requiredScore = bucket.startsWith("target") ? targetMinScore : minScore;
       return m.score >= requiredScore && (!opts.remoteOnly || j.remote);
     });

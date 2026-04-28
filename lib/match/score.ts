@@ -85,6 +85,9 @@ function resumeRoleSignal(resume: ParsedResume): { titleTokens: Set<string>; raw
   return { titleTokens: tokenSet(merged), raw: titles };
 }
 
+/** Max age in days before a job is completely excluded from results */
+const MAX_AGE_DAYS = 90;
+
 export function score(
   resume: ParsedResume | undefined,
   job: Pick<JobDoc, "extractedSkills" | "seniority" | "location" | "remote" | "postedAt"> & {
@@ -178,8 +181,32 @@ export function score(
   const diff = Math.abs(safeResume.totalYearsExperience - targetYears);
   const expScore = Math.max(1, 8 - diff * 1.2);
 
+  // ── Recency scoring (enhanced) ─────────────────────────────────
+  // Jobs older than 3 weeks get progressively penalised.
+  // Jobs older than MAX_AGE_DAYS are excluded via cap = 0.
   const days = (Date.now() - new Date(job.postedAt).getTime()) / 86_400_000;
-  const recencyScore = Math.max(0, 5 - days * 0.15);
+  let recencyScore: number;
+  let recencyReason = "";
+  if (days <= 7) {
+    // Fresh jobs: full bonus
+    recencyScore = 8;
+  } else if (days <= 21) {
+    // 1-3 weeks: gentle decay
+    recencyScore = Math.max(3, 8 - (days - 7) * 0.36);
+  } else if (days <= 45) {
+    // 3-6 weeks: steep decay
+    recencyScore = Math.max(0, 3 - (days - 21) * 0.13);
+    recencyReason = `Posted ${Math.round(days)} days ago — may be filled.`;
+  } else if (days <= MAX_AGE_DAYS) {
+    // 6 weeks - 3 months: near-zero, likely stale
+    recencyScore = 0;
+    recencyReason = `Posted ${Math.round(days / 7)} weeks ago — likely unavailable.`;
+  } else {
+    // Older than 3 months: exclude entirely
+    recencyScore = 0;
+    recencyReason = `Posted ${Math.round(days / 30)} months ago — very likely unavailable.`;
+  }
+
   const rawScore =
     skillScore + titleScore + seniorityScore + locationScore + expScore + recencyScore;
 
@@ -198,8 +225,14 @@ export function score(
   if (fit && !fit.strongTitleMatch && matched.length === 0) cap = Math.min(cap, 49);
   if (location.countryMismatch) cap = Math.min(cap, 62);
 
+  // Age-based caps: aggressively penalise stale listings
+  if (days > MAX_AGE_DAYS) cap = 0;
+  else if (days > 45) cap = Math.min(cap, 35);
+  else if (days > 21) cap = Math.min(cap, 65);
+
   const finalScore = Math.min(cap, Math.round(rawScore));
   const reasons = [
+    recencyReason,
     location.countryMismatch ? location.reason : "",
     fit?.avoidTitleMatch && !fit.strongTitleMatch
       ? "Role family does not match the resume focus."
@@ -208,6 +241,10 @@ export function score(
     jobSkills.size > 0 && skillCoverage < 0.5
       ? `Missing ${missing.length} of ${jobSkills.size} detected job skills.`
       : "",
+    matched.length > 0
+      ? `Matches ${matched.length} skill${matched.length > 1 ? "s" : ""}: ${matched.slice(0, 4).join(", ")}${matched.length > 4 ? "…" : ""}`
+      : "",
+    days <= 7 ? "Recently posted." : "",
   ].filter(Boolean);
 
   return {
