@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, Briefcase, FileText, RefreshCw, Users, Zap } from "lucide-react";
+import { Activity, AlertTriangle, Briefcase, FileText, Users, Zap } from "lucide-react";
 import Link from "next/link";
 import type React from "react";
 import { Badge } from "@/components/ui/badge";
@@ -15,8 +15,9 @@ import { AppLog } from "@/models/app-log";
 import { Job } from "@/models/job";
 import { JobSourceHealth } from "@/models/job-source-health";
 import { Resume } from "@/models/resume";
-import { loginAdmin, logoutAdmin, refreshAdminUserJobs } from "./actions";
+import { loginAdmin, logoutAdmin } from "./actions";
 import { ApifyRunButton } from "./apify-run-button";
+import { AdminRefreshUserButton } from "./refresh-user-button";
 import { type AdminLogRow, LogsTable } from "./logs-table";
 
 export const metadata = { title: "Admin" };
@@ -272,18 +273,12 @@ export default async function AdminPage({
                         {user.email}
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <Badge variant={user.emailVerified ? "success" : "warning"}>
                         {user.emailVerified ? "verified" : "unverified"}
                       </Badge>
                       <Badge variant="outline">{userResumes.length} resumes</Badge>
-                      <form action={refreshAdminUserJobs}>
-                        <input type="hidden" name="userId" value={userId} />
-                        <Button type="submit" variant="outline" size="sm" disabled={!active}>
-                          <RefreshCw className="h-3.5 w-3.5" />
-                          Refresh jobs
-                        </Button>
-                      </form>
+                      <AdminRefreshUserButton userId={userId} disabled={!active} />
                     </div>
                   </div>
 
