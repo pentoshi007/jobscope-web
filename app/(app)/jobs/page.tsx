@@ -1,11 +1,13 @@
 import { ArrowRight, BriefcaseBusiness } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { connectMongoose } from "@/lib/db";
 import { requireSession } from "@/lib/session";
 import { Resume } from "@/models/resume";
 import { DashboardFilters } from "../dashboard/filters";
+import { JobFeedSkeleton } from "../dashboard/job-feed-skeleton";
 import { StreamingFeed } from "../dashboard/streaming-feed";
 
 export const metadata = { title: "Jobs" };
@@ -24,6 +26,7 @@ export default async function JobsPage({
     deletedAt: null,
   })
     .sort({ createdAt: -1 })
+    .select({ name: 1, isActive: 1 })
     .lean();
 
   if (activeResumes.length === 0) {
@@ -67,9 +70,13 @@ export default async function JobsPage({
             </span>
           </p>
         </div>
-        <DashboardFilters />
+        <Suspense fallback={null}>
+          <DashboardFilters />
+        </Suspense>
       </div>
-      <StreamingFeed />
+      <Suspense fallback={<JobFeedSkeleton />}>
+        <StreamingFeed />
+      </Suspense>
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import { ArrowLeft, Building2, ExternalLink, MapPin } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ScoreDonut } from "@/components/app/score-donut";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { connectMongoose } from "@/lib/db";
 import { buildResumeJobProfile } from "@/lib/jobs/profile";
 import { score } from "@/lib/match/score";
@@ -13,8 +15,22 @@ import { formatRelative, formatSalary } from "@/lib/utils";
 import { Application } from "@/models/application";
 import { Job } from "@/models/job";
 import { Resume } from "@/models/resume";
-import { AIHelpers } from "./ai-helpers";
 import { JobActions } from "./job-actions";
+
+const AIHelpers = dynamic(() => import("./ai-helpers").then((mod) => mod.AIHelpers), {
+  loading: () => (
+    <Card>
+      <CardHeader>
+        <Skeleton className="h-5 w-28" />
+      </CardHeader>
+      <CardContent className="grid gap-2 sm:grid-cols-3">
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+      </CardContent>
+    </Card>
+  ),
+});
 
 export default async function JobDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

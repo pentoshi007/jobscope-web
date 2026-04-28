@@ -2,7 +2,7 @@
 import { Building2, Globe, Loader2, MapPin, RefreshCw, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScoreDonut } from "@/components/app/score-donut";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -239,11 +239,17 @@ export function StreamingFeed() {
 }
 
 function mergeJobs(prev: StreamJob[], incoming: StreamJob[]): StreamJob[] {
+  if (incoming.length === 0) return prev;
   const map = new Map(prev.map((j) => [j.id, j]));
+  let changed = false;
   for (const j of incoming) {
     const existing = map.get(j.id);
-    if (!existing || j.match.score > existing.match.score) map.set(j.id, j);
+    if (!existing || j.match.score > existing.match.score) {
+      map.set(j.id, j);
+      changed = true;
+    }
   }
+  if (!changed) return prev;
   return [...map.values()];
 }
 
@@ -314,7 +320,7 @@ function StatusBar({
   );
 }
 
-function StreamCard({ job }: { job: StreamJob }) {
+const StreamCard = memo(function StreamCard({ job }: { job: StreamJob }) {
   const salary = formatSalary(
     job.salary?.min ?? null,
     job.salary?.max ?? null,
@@ -375,4 +381,4 @@ function StreamCard({ job }: { job: StreamJob }) {
       </div>
     </Card>
   );
-}
+});

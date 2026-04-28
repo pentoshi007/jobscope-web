@@ -1,7 +1,7 @@
 import { connectMongoose } from "@/lib/db";
+import { requireSession } from "@/lib/session";
 import { Application } from "@/models/application";
 import { Job } from "@/models/job";
-import { requireSession } from "@/lib/session";
 import { KanbanBoard } from "./kanban";
 import { Stats } from "./stats";
 
@@ -10,7 +10,10 @@ export const metadata = { title: "Tracker" };
 export default async function ApplicationsPage() {
   const session = await requireSession();
   await connectMongoose();
-  const apps = await Application.find({ userId: session.user.id }).sort({ updatedAt: -1 }).lean();
+  const apps = await Application.find({ userId: session.user.id })
+    .sort({ updatedAt: -1 })
+    .select({ jobId: 1, status: 1, notes: 1, appliedAt: 1, matchScoreSnapshot: 1, createdAt: 1 })
+    .lean();
   const jobIds = apps.map((a) => a.jobId);
   const jobs = jobIds.length
     ? await Job.find({ _id: { $in: jobIds } })
