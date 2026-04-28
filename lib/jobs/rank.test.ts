@@ -40,6 +40,16 @@ function job(id: string, location: string, remote: boolean) {
 }
 
 describe("rankJobsForUser", () => {
+  it("scores jobs when an active resume is missing parsed data", () => {
+    const ranked = rankJobsForUser([undefined], [job("missing-parsed", "Remote", true)], {
+      limit: 1,
+      minScore: 0,
+    });
+
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0].m.score).toBeGreaterThanOrEqual(0);
+  });
+
   it("prioritizes target-country jobs while preserving remote and global buckets", () => {
     const jobs = [
       ...Array.from({ length: 30 }, (_, i) => job(`tr-${i}`, "Remote, India", true)),

@@ -1,6 +1,6 @@
 import type { JobDoc } from "@/models/job";
 import { type ResumeJobProfile, roleFitDetails } from "../jobs/profile";
-import { type ParsedResume, ParsedResumeSchema } from "../resume/schema";
+import { normalizeParsedResume, type ParsedResume } from "../resume/schema";
 import { analyzeLocation } from "./location";
 import { isAdjacent } from "./seniority";
 
@@ -96,8 +96,8 @@ export function score(
   },
   prefs: { preferredLocations?: string[]; roleProfile?: ResumeJobProfile } = {},
 ): MatchResult {
-  const safeResume: ParsedResume = resume ?? ParsedResumeSchema.parse({});
-  const jsp = safeResume.jobSearchProfile ?? { requiredSkills: [], preferredSkills: [], supportingSkills: [] };
+  const safeResume = normalizeParsedResume(resume);
+  const jsp = safeResume.jobSearchProfile;
   const sk = safeResume.skills ?? { languages: [], frameworks: [], tools: [], databases: [], cloud: [] };
 
   const resumeSkills = new Set(

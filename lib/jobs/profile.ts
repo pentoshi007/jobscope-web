@@ -1,6 +1,7 @@
 import {
   type JobSearchProfile,
   JobSearchProfileSchema,
+  normalizeParsedResume,
   type ParsedResume,
 } from "@/lib/resume/schema";
 
@@ -91,7 +92,9 @@ const WEAK_JOB_WORDS = new Set([
   "analyst",
 ]);
 
-export function buildResumeJobProfile(resumes: ParsedResume[]): ResumeJobProfile {
+export function buildResumeJobProfile(
+  resumes: Array<ParsedResume | null | undefined>,
+): ResumeJobProfile {
   const weightedTerms = new Map<string, { weight: number; source: TermSource }>();
   const titleScores = new Map<string, number>();
   const secondaryScores = new Map<string, number>();
@@ -103,7 +106,8 @@ export function buildResumeJobProfile(resumes: ParsedResume[]): ResumeJobProfile
   let primaryFromProfile = "";
   let source: ResumeJobProfile["source"] = "derived";
 
-  for (const resume of resumes) {
+  for (const rawResume of resumes) {
+    const resume = normalizeParsedResume(rawResume);
     const stored = safeJobSearchProfile(resume);
     const hasStored = !!(
       stored.primaryRole ||

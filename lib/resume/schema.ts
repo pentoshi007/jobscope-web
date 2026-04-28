@@ -137,3 +137,8 @@ export const ParsedResumeSchema = z.object({
 
 export type ParsedResume = z.infer<typeof ParsedResumeSchema>;
 export type JobSearchProfile = z.infer<typeof JobSearchProfileSchema>;
+
+export function normalizeParsedResume(value: unknown): ParsedResume {
+  const result = ParsedResumeSchema.safeParse(value ?? {});
+  return result.success ? result.data : ParsedResumeSchema.parse({});
+}

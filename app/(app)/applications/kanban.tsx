@@ -9,7 +9,6 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { ExternalLink, GripVertical } from "lucide-react";
-import { motion } from "motion/react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -130,12 +129,11 @@ function DraggableCard({ card, onRemove }: { card: Card; onRemove: () => void })
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
   return (
-    <motion.div
+    <div
       ref={setNodeRef}
       style={style}
-      layoutId={card.id}
       className={`group cursor-grab rounded-md border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm active:cursor-grabbing ${
-        isDragging ? "opacity-50" : ""
+        isDragging ? "opacity-30 scale-105 shadow-lg" : ""
       }`}
       {...listeners}
       {...attributes}
@@ -173,6 +171,6 @@ function DraggableCard({ card, onRemove }: { card: Card; onRemove: () => void })
       >
         remove
       </button>
-    </motion.div>
+    </div>
   );
 }

@@ -6,7 +6,7 @@ import { Resume } from "@/models/resume";
 import { requireSession } from "@/lib/session";
 import { ResumeEditor } from "./editor";
 import { atsScore } from "@/lib/resume/ats";
-import { ParsedResumeSchema } from "@/lib/resume/schema";
+import { normalizeParsedResume } from "@/lib/resume/schema";
 import { ScoreDonut } from "@/components/app/score-donut";
 import { Badge } from "@/components/ui/badge";
 
@@ -22,7 +22,7 @@ export default async function ResumeDetail({
   if (!r) notFound();
 
   // Normalize parsed through Zod schema to ensure all fields have safe defaults
-  const parsed = ParsedResumeSchema.parse(r.parsed ?? {});
+  const parsed = normalizeParsedResume(r.parsed);
   const ats = atsScore(parsed, r.rawText ?? "");
 
   return (

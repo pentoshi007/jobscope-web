@@ -1,7 +1,7 @@
 import { Job } from "@/models/job";
 import { env } from "../env";
 import { inferCountry } from "../match/location";
-import type { ParsedResume } from "../resume/schema";
+import { normalizeParsedResume, type ParsedResume } from "../resume/schema";
 import { dedupeHash } from "./dedupe";
 import { quickSkillExtract } from "./enrich";
 import { cacheTtlMs } from "./ingest/runner";
@@ -18,7 +18,7 @@ export interface PersonalizedQuery {
 }
 
 export function buildPersonalizedQuery(
-  resumes: ParsedResume[],
+  resumes: Array<ParsedResume | null | undefined>,
   preferredLocations: string[] = [],
 ): PersonalizedQuery {
   if (resumes.length === 0) {
@@ -34,11 +34,13 @@ export function buildPersonalizedQuery(
 
   let seniority: ParsedResume["inferredSeniority"] = "mid";
 
-  for (const r of resumes) {
+  const parsedResumes = resumes.map(normalizeParsedResume);
+
+  for (const r of parsedResumes) {
     seniority = r.inferredSeniority;
   }
 
-  const profile = buildResumeJobProfile(resumes);
+  const profile = buildResumeJobProfile(parsedResumes);
   const primaryRole = profile.queryRoles[0] ?? "software engineer";
   const searchQueries = profile.queryRoles.length ? profile.queryRoles.slice(0, 5) : [primaryRole];
   const keywords = Array.from(

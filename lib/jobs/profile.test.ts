@@ -4,6 +4,23 @@ import { ParsedResumeSchema } from "@/lib/resume/schema";
 import { buildResumeJobProfile, jobMatchesProfile } from "./profile";
 
 describe("resume job profile matching", () => {
+  it("falls back to a default profile when parsed resume data is missing", () => {
+    const profile = buildResumeJobProfile([undefined]);
+
+    expect(profile.primaryTitle).toBe("general");
+    expect(() =>
+      score(undefined, {
+        title: "Software Engineer",
+        description: "Build product features.",
+        extractedSkills: [],
+        seniority: "mid",
+        location: "Remote",
+        remote: true,
+        postedAt: new Date(),
+      }),
+    ).not.toThrow();
+  });
+
   it("keeps a cybersecurity resume from matching full-stack roles as primary jobs", () => {
     const resume = ParsedResumeSchema.parse({
       headline: "Dedicated Cybersecurity Analyst",

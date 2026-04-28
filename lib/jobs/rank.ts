@@ -1,7 +1,7 @@
 import { inferCountry } from "@/lib/match/location";
 import type { MatchResult } from "@/lib/match/score";
 import { score } from "@/lib/match/score";
-import type { ParsedResume } from "@/lib/resume/schema";
+import { normalizeParsedResume, type ParsedResume } from "@/lib/resume/schema";
 import type { ResumeJobProfile } from "./profile";
 
 type RankableJob = {
@@ -38,18 +38,19 @@ export interface RankJobsOptions {
 }
 
 export function rankJobsForUser<TJob extends RankableJob>(
-  resumes: ParsedResume[],
+  resumes: Array<ParsedResume | null | undefined>,
   jobs: TJob[],
   opts: RankJobsOptions = {},
 ) {
-  const targetCountry = inferTargetCountry(resumes, opts.preferredLocations ?? []);
+  const parsedResumes = resumes.map(normalizeParsedResume);
+  const targetCountry = inferTargetCountry(parsedResumes, opts.preferredLocations ?? []);
   const minScore = opts.minScore ?? 30;
   const targetMinScore = opts.targetMinScore ?? Math.max(20, minScore - 10);
   const limit = opts.limit ?? 60;
   const MAX_AGE_DAYS = 90;
   const ranked = jobs
     .map((job) => {
-      const matches = resumes.map((resume) =>
+      const matches = parsedResumes.map((resume) =>
         score(resume, job as never, {
           preferredLocations: opts.preferredLocations,
           roleProfile: opts.roleProfile,
