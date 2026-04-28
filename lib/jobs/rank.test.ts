@@ -59,4 +59,18 @@ describe("rankJobsForUser", () => {
     expect(counts.otherRemote).toBe(6);
     expect(counts.otherOnsite).toBe(1);
   });
+
+  it("does not backfill other-country jobs beyond quota when target-country jobs exist", () => {
+    const jobs = [
+      ...Array.from({ length: 2 }, (_, i) => job(`tr-${i}`, "Remote, India", true)),
+      ...Array.from({ length: 30 }, (_, i) => job(`or-${i}`, "Remote, United States", true)),
+      ...Array.from({ length: 30 }, (_, i) => job(`oo-${i}`, "London, United Kingdom", false)),
+    ];
+
+    const ranked = rankJobsForUser([resume], jobs, { limit: 20, minScore: 30 });
+    const otherCountryCount = ranked.filter((item) => item.bucket.startsWith("other")).length;
+
+    expect(ranked.some((item) => item.bucket.startsWith("target"))).toBe(true);
+    expect(otherCountryCount).toBeLessThanOrEqual(7);
+  });
 });

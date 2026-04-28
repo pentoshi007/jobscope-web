@@ -6,6 +6,7 @@ export interface SafeFetchOptions extends RequestInit {
   timeoutMs?: number;
   maxBytes?: number;
   logPath?: string;
+  quietStatuses?: number[];
   meta?: Record<string, unknown>;
 }
 
@@ -28,6 +29,7 @@ export async function safeFetchText(url: string, opts: SafeFetchOptions) {
     timeoutMs: timeoutOverride,
     maxBytes: maxByteOverride,
     logPath,
+    quietStatuses,
     meta,
     ...init
   } = opts;
@@ -70,20 +72,22 @@ export async function safeFetchText(url: string, opts: SafeFetchOptions) {
   } catch (error) {
     const details = errorToLog(error);
     const status = error instanceof SafeFetchError ? error.status : undefined;
-    await logAppEvent({
-      kind: status === 429 ? "rate_limit" : "job_source",
-      source: `jobs.${source}`,
-      path: logPath ?? "/api/cron/fetch-jobs",
-      status,
-      message: details.message,
-      stack: details.stack,
-      meta: {
-        label,
-        durationMs: Date.now() - started,
-        retryAfterMs: error instanceof SafeFetchError ? error.retryAfterMs : undefined,
-        ...meta,
-      },
-    });
+    if (!status || !quietStatuses?.includes(status)) {
+      await logAppEvent({
+        kind: status === 429 ? "rate_limit" : "job_source",
+        source: `jobs.${source}`,
+        path: logPath ?? "/api/cron/fetch-jobs",
+        status,
+        message: details.message,
+        stack: details.stack,
+        meta: {
+          label,
+          durationMs: Date.now() - started,
+          retryAfterMs: error instanceof SafeFetchError ? error.retryAfterMs : undefined,
+          ...meta,
+        },
+      });
+    }
     throw error;
   } finally {
     clearTimeout(timer);

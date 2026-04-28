@@ -86,6 +86,7 @@ const careerjetSource: IngestSource = {
               Authorization: `Basic ${Buffer.from(`${env.CAREERJET_API_KEY}:`).toString("base64")}`,
             },
             timeoutMs: 10_000,
+            quietStatuses: [403],
             meta: { role, location },
           },
         ).catch(() => ({ jobs: [] }));
@@ -366,6 +367,7 @@ async function fetchGreenhouse(company: AtsCompany) {
     source: "ats",
     label: `greenhouse:${company.token}`,
     timeoutMs: 8_000,
+    quietStatuses: [404],
     meta: { company: company.company, ats: company.ats },
   }).catch(() => ({ jobs: [] }));
   return (data.jobs ?? []).map((job) =>
@@ -395,6 +397,7 @@ async function fetchLever(company: AtsCompany) {
     source: "ats",
     label: `lever:${company.token}`,
     timeoutMs: 8_000,
+    quietStatuses: [404],
     meta: { company: company.company, ats: company.ats },
   }).catch(() => []);
   return data.map((job) =>
@@ -430,6 +433,7 @@ async function fetchAshby(company: AtsCompany) {
       source: "ats",
       label: `ashby:${company.token}`,
       timeoutMs: 8_000,
+      quietStatuses: [404],
       meta: { company: company.company, ats: company.ats },
     },
   ).catch(() => ({ jobs: [] }));
@@ -461,6 +465,7 @@ async function fetchWorkable(company: AtsCompany) {
     source: "ats",
     label: `workable:${company.token}`,
     timeoutMs: 8_000,
+    quietStatuses: [404],
     meta: { company: company.company, ats: company.ats },
   }).catch(() => ({ jobs: [] }));
   return (data.jobs ?? []).map((job) =>

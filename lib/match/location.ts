@@ -131,6 +131,16 @@ export function analyzeLocation(
     };
   }
 
+  if (resumeCountry && jobCountry && resumeCountry !== jobCountry) {
+    return {
+      resumeCountry,
+      jobCountry,
+      countryMismatch: true,
+      matched: false,
+      reason: `Different country: resume is ${resumeCountry}, job is ${jobCountry}.`,
+    };
+  }
+
   for (const p of preferred) {
     if (p && normalize(jobLoc).includes(normalize(p))) {
       return {
@@ -141,16 +151,6 @@ export function analyzeLocation(
         reason: "Matches a preferred location.",
       };
     }
-  }
-
-  if (resumeCountry && jobCountry && resumeCountry !== jobCountry) {
-    return {
-      resumeCountry,
-      jobCountry,
-      countryMismatch: true,
-      matched: false,
-      reason: `Different country: resume is ${resumeCountry}, job is ${jobCountry}.`,
-    };
   }
 
   const resumeBase = normalize(resumeLoc).split(",")[0]?.trim();

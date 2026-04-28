@@ -4,7 +4,7 @@ import { errorToLog, logAppEvent } from "@/lib/app-log";
 import { connectMongoose, getDb } from "@/lib/db";
 import { buildPersonalizedQuery } from "@/lib/jobs/personalized";
 import { jobMatchesProfile } from "@/lib/jobs/profile";
-import { rankJobsForUser } from "@/lib/jobs/rank";
+import { inferTargetCountry, rankJobsForUser } from "@/lib/jobs/rank";
 import type { MatchResult } from "@/lib/match/score";
 import { parsePrefs } from "@/lib/preferences";
 import { getSession } from "@/lib/session";
@@ -100,33 +100,15 @@ export async function GET(_req: NextRequest) {
 
         // Score only cached jobs. Fresh external API fetches happen on resume upload and cron.
         const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
-        const filter: Record<string, unknown> = {
+        const freshFilter: Record<string, unknown> = {
           $or: [{ cacheExpiresAt: { $gte: new Date() } }, { fetchedAt: { $gte: since } }],
         };
+        const targetCountry = inferTargetCountry(
+          resumes.map((r) => r.parsed as never),
+          prefs.preferredLocations,
+        );
 
-        const cached = await Job.find(filter)
-          .sort({ postedAt: -1 })
-          .limit(1000)
-          .select({
-            title: 1,
-            company: 1,
-            location: 1,
-            remote: 1,
-            seniority: 1,
-            source: 1,
-            url: 1,
-            postedAt: 1,
-            salary: 1,
-            description: 1,
-            category: 1,
-            tags: 1,
-            extractedSkills: 1,
-            country: 1,
-            workMode: 1,
-            sourceQuality: 1,
-            cacheExpiresAt: 1,
-          })
-          .lean();
+        const cached = await fetchJobCandidates(freshFilter, targetCountry);
 
         safeSend("status", { phase: "scoring", count: cached.length });
 
@@ -138,8 +120,10 @@ export async function GET(_req: NextRequest) {
             preferredLocations: prefs.preferredLocations,
             roleProfile: pq.profile,
             minScore: 30,
+            targetMinScore: 20,
             limit: 60,
             remoteOnly: prefs.remoteOnly,
+            strictCountryRatio: true,
           },
         );
 
@@ -191,4 +175,47 @@ export async function GET(_req: NextRequest) {
       "X-Accel-Buffering": "no",
     },
   });
+}
+
+function jobProjection() {
+  return {
+    title: 1,
+    company: 1,
+    location: 1,
+    remote: 1,
+    seniority: 1,
+    source: 1,
+    url: 1,
+    postedAt: 1,
+    salary: 1,
+    description: 1,
+    category: 1,
+    tags: 1,
+    extractedSkills: 1,
+    country: 1,
+    workMode: 1,
+    sourceQuality: 1,
+    cacheExpiresAt: 1,
+  };
+}
+
+async function fetchJobCandidates(freshFilter: Record<string, unknown>, targetCountry: string) {
+  if (!targetCountry) {
+    return Job.find(freshFilter).sort({ postedAt: -1 }).limit(1200).select(jobProjection()).lean();
+  }
+
+  const [target, other] = await Promise.all([
+    Job.find({ ...freshFilter, country: targetCountry })
+      .sort({ postedAt: -1 })
+      .limit(1200)
+      .select(jobProjection())
+      .lean(),
+    Job.find({ ...freshFilter, country: { $ne: targetCountry } })
+      .sort({ postedAt: -1 })
+      .limit(500)
+      .select(jobProjection())
+      .lean(),
+  ]);
+
+  return [...target, ...other];
 }

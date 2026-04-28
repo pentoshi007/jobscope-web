@@ -31,8 +31,10 @@ export interface RankJobsOptions {
   preferredLocations?: string[];
   roleProfile?: ResumeJobProfile;
   minScore?: number;
+  targetMinScore?: number;
   limit?: number;
   remoteOnly?: boolean;
+  strictCountryRatio?: boolean;
 }
 
 export function rankJobsForUser<TJob extends RankableJob>(
@@ -42,6 +44,7 @@ export function rankJobsForUser<TJob extends RankableJob>(
 ) {
   const targetCountry = inferTargetCountry(resumes, opts.preferredLocations ?? []);
   const minScore = opts.minScore ?? 30;
+  const targetMinScore = opts.targetMinScore ?? Math.max(20, minScore - 10);
   const limit = opts.limit ?? 60;
   const ranked = jobs
     .map((job) => {
@@ -59,9 +62,12 @@ export function rankJobsForUser<TJob extends RankableJob>(
         sortScore: m.score + Math.min(10, Math.max(0, (job.sourceQuality ?? 50) / 10)),
       };
     })
-    .filter(({ j, m }) => m.score >= minScore && (!opts.remoteOnly || j.remote));
+    .filter(({ j, m, bucket }) => {
+      const requiredScore = bucket.startsWith("target") ? targetMinScore : minScore;
+      return m.score >= requiredScore && (!opts.remoteOnly || j.remote);
+    });
 
-  return allocateByDistribution(ranked, limit);
+  return allocateByDistribution(ranked, limit, opts.strictCountryRatio ?? true);
 }
 
 export function inferTargetCountry(resumes: ParsedResume[], preferredLocations: string[] = []) {
@@ -86,6 +92,7 @@ function bucketFor(job: RankableJob, targetCountry: string): RankBucket {
 function allocateByDistribution<TJob extends RankableJob>(
   ranked: Array<RankedJob<TJob>>,
   limit: number,
+  strictCountryRatio: boolean,
 ) {
   const byBucket: Record<RankBucket, Array<RankedJob<TJob>>> = {
     targetRemote: [],
@@ -116,6 +123,19 @@ function allocateByDistribution<TJob extends RankableJob>(
   }
 
   if (selected.length < limit) {
+    const targetBackfill = [...byBucket.targetRemote, ...byBucket.targetOnsite]
+      .filter((item) => !seen.has(item.j))
+      .sort((a, b) => b.sortScore - a.sortScore)
+      .slice(0, limit - selected.length);
+    for (const item of targetBackfill) {
+      selected.push(item);
+      seen.add(item.j);
+    }
+  }
+
+  // If there are any target-country matches, do not let other-country jobs exceed their quota.
+  // This may intentionally return fewer jobs instead of showing a feed dominated by other countries.
+  if (!strictCountryRatio || selected.every((item) => !item.bucket.startsWith("target"))) {
     const backfill = ranked
       .filter((item) => !seen.has(item.j))
       .sort((a, b) => b.sortScore - a.sortScore)

@@ -262,6 +262,39 @@ describe("resume job profile matching", () => {
     );
 
     expect(result.score).toBeLessThanOrEqual(62);
+    expect(result.breakdown.location).toBe(0);
     expect(result.reasons[0]).toContain("Different country");
+  });
+
+  it("gives zero location points to non-remote country mismatches even if preferred", () => {
+    const resume = ParsedResumeSchema.parse({
+      headline: "Data Analyst",
+      location: "Mumbai, India",
+      inferredSeniority: "mid",
+      skills: {
+        languages: ["Python"],
+        frameworks: [],
+        tools: [],
+        databases: [],
+        cloud: [],
+        soft: [],
+      },
+    });
+
+    const result = score(
+      resume,
+      {
+        title: "Data Analyst",
+        description: "Analyze business data with Python.",
+        extractedSkills: ["python"],
+        seniority: "mid",
+        location: "Chicago, IL, United States",
+        remote: false,
+        postedAt: new Date(),
+      },
+      { preferredLocations: ["Chicago"] },
+    );
+
+    expect(result.breakdown.location).toBe(0);
   });
 });
