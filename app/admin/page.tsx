@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, Briefcase, FileText, RefreshCw, Users } from "lucide-react";
+import { Activity, AlertTriangle, Briefcase, FileText, RefreshCw, Users, Zap } from "lucide-react";
 import Link from "next/link";
 import type React from "react";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import { Job } from "@/models/job";
 import { JobSourceHealth } from "@/models/job-source-health";
 import { Resume } from "@/models/resume";
 import { loginAdmin, logoutAdmin, refreshAdminUserJobs } from "./actions";
+import { ApifyRunButton } from "./apify-run-button";
 import { type AdminLogRow, LogsTable } from "./logs-table";
 
 export const metadata = { title: "Admin" };
@@ -193,9 +194,12 @@ export default async function AdminPage({
       </div>
 
       <Card className="p-4 sm:p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <Briefcase className="h-4 w-4 text-[var(--color-accent)]" />
-          <h2 className="font-semibold tracking-tight">Job source health</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Briefcase className="h-4 w-4 text-[var(--color-accent)]" />
+            <h2 className="font-semibold tracking-tight">Job source health</h2>
+          </div>
+          <ApifyRunButton />
         </div>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {sourceHealth.map((source) => (

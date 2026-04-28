@@ -1,6 +1,7 @@
 import { env } from "@/lib/env";
 import { LINKEDIN_APIFY_SOURCE, LINKEDIN_APIFY_TTL_MS } from "@/lib/jobs/source-constants";
 import { inferCountry } from "@/lib/match/location";
+import { ApifyRun } from "@/models/apify-run";
 import { Job } from "@/models/job";
 import { inferSeniority, type NormalizedJob, stripHtml, type WorkMode } from "../types";
 import type { IngestContext, IngestSource } from "./runner";
@@ -8,39 +9,148 @@ import type { IngestContext, IngestSource } from "./runner";
 const DEFAULT_ACTOR_ID = "hKByXkMQaC5Qt9UMN";
 const DEFAULT_LINKEDIN_SEARCH_URL = "https://www.linkedin.com/jobs/search/?position=1&pageNum=0";
 const LINKEDIN_APIFY_COUNT = 100;
+const APIFY_TERMINAL_STATUSES = new Set(["SUCCEEDED", "FAILED", "TIMED-OUT", "ABORTED"]);
+/** Abandon run records older than 6 hours – the actor likely died silently. */
+const STALE_RUN_MS = 6 * 60 * 60 * 1000;
+
+// ─── cron-safe source ────────────────────────────────────────────────
+// The LinkedIn Apify actor can take several minutes.  Rather than
+// blocking the cron function and aborting when the Vercel timeout hits,
+// we use a two-phase approach:
+//  Phase 1 – no pending run: start the actor (fire-and-forget) and
+//            persist the runId.  Return [] so other sources aren't
+//            blocked.
+//  Phase 2 – pending run found: poll once to see if the run finished.
+//            If SUCCEEDED → read dataset, upsert jobs, return them.
+//            If still running → return [].
+//            If failed → clean up, optionally start a new one.
 
 export const linkedinApifySource: IngestSource = {
   source: LINKEDIN_APIFY_SOURCE,
   enabled: Boolean(env.APIFY_API_TOKEN),
   quality: 84,
-  maxRunMs: 45_000,
+  maxRunMs: 20_000,
   async fetchJobs(ctx) {
     if (!env.APIFY_API_TOKEN) return [];
 
+    // If we already have fresh jobs there's nothing to do.
     const freshCache = await hasFreshLinkedInApifyJobs();
     if (freshCache) return [];
 
-    const waitSecs = Math.max(1, Math.floor((ctx.deadlineAt - Date.now()) / 1000));
     const actorId = actorPathId(env.APIFY_LINKEDIN_ACTOR_ID || DEFAULT_ACTOR_ID);
-    const run = await runApifyActor(actorId, waitSecs);
 
-    if (typeof run.status === "string" && run.status !== "SUCCEEDED") {
-      if (typeof run.id === "string") {
-        await abortApifyRun(run.id);
+    // ── Check for a previously started run ──────────────────────
+    const pending = await ApifyRun.findOne({
+      status: { $nin: [...APIFY_TERMINAL_STATUSES] },
+      ingested: false,
+      startedAt: { $gte: new Date(Date.now() - STALE_RUN_MS) },
+    }).sort({ startedAt: -1 });
+
+    if (pending?.runId) {
+      const run = await getApifyRun(pending.runId);
+
+      if (run.status && APIFY_TERMINAL_STATUSES.has(run.status)) {
+        await ApifyRun.updateOne(
+          { _id: pending._id },
+          { status: run.status, defaultDatasetId: run.defaultDatasetId ?? "", completedAt: new Date() },
+        );
+
+        if (run.status === "SUCCEEDED" && run.defaultDatasetId) {
+          const items = await getApifyDatasetItems(run.defaultDatasetId);
+          await ApifyRun.updateOne({ _id: pending._id }, { ingested: true });
+          return items
+            .map((item) => normalizeLinkedInItem(item as LinkedInApifyItem, ctx))
+            .filter((job): job is NormalizedJob => Boolean(job));
+        }
+        // Non-success terminal – fall through to start a new run.
+      } else {
+        // Still running – leave it alone.
+        return [];
       }
-      throw new Error(`Apify LinkedIn actor ended with status ${run.status}`);
-    }
-    if (!run.defaultDatasetId) {
-      throw new Error("Apify LinkedIn actor did not return a default dataset");
     }
 
-    const items = await getApifyDatasetItems(run.defaultDatasetId);
+    // Clean up stale/old pending records.
+    await ApifyRun.deleteMany({
+      $or: [
+        { startedAt: { $lt: new Date(Date.now() - STALE_RUN_MS) }, ingested: false },
+        { ingested: true },
+      ],
+    });
 
-    return items
-      .map((item) => normalizeLinkedInItem(item as LinkedInApifyItem, ctx))
-      .filter((job): job is NormalizedJob => Boolean(job));
+    // ── Phase 1: fire-and-forget a new run ──────────────────────
+    const started = await startApifyActor(actorId);
+    if (started.id) {
+      await ApifyRun.create({
+        runId: started.id,
+        actorId,
+        status: started.status ?? "RUNNING",
+        defaultDatasetId: started.defaultDatasetId ?? "",
+        origin: "cron",
+      });
+    }
+
+    // We'll pick up the data on the next cron tick.
+    return [];
   },
 };
+
+// ─── manual (admin) run – waits for completion ───────────────────────
+export async function runApifyManual(
+  onProgress?: (msg: string) => void,
+): Promise<NormalizedJob[]> {
+  if (!env.APIFY_API_TOKEN) throw new Error("APIFY_API_TOKEN not configured");
+  const actorId = actorPathId(env.APIFY_LINKEDIN_ACTOR_ID || DEFAULT_ACTOR_ID);
+
+  onProgress?.("Starting Apify LinkedIn actor…");
+  const started = await startApifyActor(actorId);
+  if (!started.id) throw new Error("Apify did not return a run ID");
+
+  await ApifyRun.create({
+    runId: started.id,
+    actorId,
+    status: started.status ?? "RUNNING",
+    defaultDatasetId: started.defaultDatasetId ?? "",
+    origin: "admin",
+  });
+
+  onProgress?.(`Run ${started.id} started. Polling for completion…`);
+
+  // Poll indefinitely (no deadline) until the actor finishes.
+  let run = started;
+  let polls = 0;
+  while (run.status && !APIFY_TERMINAL_STATUSES.has(run.status)) {
+    await sleep(3_000);
+    run = await getApifyRun(started.id);
+    polls++;
+    if (polls % 5 === 0) {
+      onProgress?.(`Still running… (polled ${polls} times, status=${run.status})`);
+    }
+  }
+
+  await ApifyRun.updateOne(
+    { runId: started.id },
+    { status: run.status, defaultDatasetId: run.defaultDatasetId ?? "", completedAt: new Date() },
+  );
+
+  if (run.status !== "SUCCEEDED") {
+    throw new Error(`Apify LinkedIn actor ended with status ${run.status}`);
+  }
+  if (!run.defaultDatasetId) {
+    throw new Error("Apify LinkedIn actor did not return a default dataset");
+  }
+
+  onProgress?.("Fetching dataset items…");
+  const items = await getApifyDatasetItems(run.defaultDatasetId);
+  await ApifyRun.updateOne({ runId: started.id }, { ingested: true });
+
+  onProgress?.(`Got ${items.length} items. Normalizing…`);
+  const dummyCtx: IngestContext = { roles: [], countries: [], cities: [], deadlineAt: Infinity };
+  return items
+    .map((item) => normalizeLinkedInItem(item as LinkedInApifyItem, dummyCtx))
+    .filter((job): job is NormalizedJob => Boolean(job));
+}
+
+// ─── Apify HTTP helpers ──────────────────────────────────────────────
 
 interface ApifyRun {
   id?: string;
@@ -48,10 +158,14 @@ interface ApifyRun {
   defaultDatasetId?: string;
 }
 
-async function runApifyActor(actorId: string, waitSecs: number): Promise<ApifyRun> {
+/**
+ * Start the actor with waitForFinish=0 so the HTTP call returns
+ * immediately with the run metadata.
+ */
+async function startApifyActor(actorId: string): Promise<ApifyRun> {
   const response = await apifyJson<ApifyRun | { data?: ApifyRun }>(
     `https://api.apify.com/v2/acts/${actorId}/runs?${apifyParams({
-      waitForFinish: String(waitSecs),
+      waitForFinish: "0",
     })}`,
     {
       method: "POST",
@@ -62,7 +176,7 @@ async function runApifyActor(actorId: string, waitSecs: number): Promise<ApifyRu
         count: LINKEDIN_APIFY_COUNT,
         splitByLocation: false,
       }),
-      signal: AbortSignal.timeout(Math.max(1, waitSecs + 2) * 1000),
+      signal: AbortSignal.timeout(30_000),
     },
   );
   return unwrapApifyData(response);
@@ -79,11 +193,12 @@ async function getApifyDatasetItems(datasetId: string) {
   return Array.isArray(data) ? data : (data.items ?? []);
 }
 
-async function abortApifyRun(runId: string) {
-  await apifyJson<ApifyRun | { data?: ApifyRun }>(
-    `https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}/abort?${apifyParams()}`,
-    { method: "POST", signal: AbortSignal.timeout(10_000) },
-  ).catch(() => undefined);
+async function getApifyRun(runId: string): Promise<ApifyRun> {
+  const response = await apifyJson<ApifyRun | { data?: ApifyRun }>(
+    `https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}?${apifyParams()}`,
+    { signal: AbortSignal.timeout(10_000) },
+  );
+  return unwrapApifyData(response);
 }
 
 async function apifyJson<T>(url: string, init: RequestInit = {}): Promise<T> {
@@ -110,6 +225,10 @@ function actorPathId(actorId: string) {
   return encodeURIComponent(actorId.replace(/\//g, "~"));
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
 export async function hasFreshLinkedInApifyJobs(now = new Date()) {
   const fetchedAfter = new Date(now.getTime() - LINKEDIN_APIFY_TTL_MS);
   const existing = await Job.exists({
@@ -118,6 +237,8 @@ export async function hasFreshLinkedInApifyJobs(now = new Date()) {
   });
   return Boolean(existing);
 }
+
+// ─── normalisation helpers ──────────────────────────────────────────
 
 type LinkedInApifyItem = Record<string, unknown>;
 
