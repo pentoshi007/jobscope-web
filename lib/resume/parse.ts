@@ -1,7 +1,7 @@
-import { ParsedResumeSchema, type ParsedResume } from "./schema";
 import { geminiJson } from "../llm/gemini";
 import { groqJson } from "../llm/groq";
 import { redactPII } from "../llm/redact";
+import { type ParsedResume, ParsedResumeSchema } from "./schema";
 
 const MAX_PROMPT_CHARS = 28_000;
 const HEAD_CHARS = 20_000;
@@ -77,6 +77,7 @@ Rules:
 - EXPERIENCE is critical: look for sections titled "Experience", "Work Experience", "Professional Experience", "Employment History", or similar. Each role should have company, role/title, dates, and bullet point descriptions. Even if formatting is messy, extract every job entry.
 - For each experience entry, capture ALL bullet points/descriptions as a single string joined with "\\n• ".
 - Skills categorization: languages = programming languages only; frameworks = libraries/frameworks; tools = CLIs/IDEs/build tools/design tools; databases separate; cloud = AWS/GCP/Azure services. Do NOT duplicate a skill across categories.
+- Skills must be actual skills/tools, not job titles or role labels. Do NOT put phrases like "full stack web developer", "security analyst", "data analyst", or "video editor" inside skills.
 - Look hard for links/URLs anywhere in the text — header, footer, contact line, project lines. URLs may appear in these formats:
   * Direct URLs: https://example.com
   * Parenthesized after text: "My Website (https://example.com)" — extract the URL from parentheses
@@ -116,7 +117,8 @@ function smartTruncate(text: string): string {
   return `${text.slice(0, HEAD_CHARS)}\n\n[…truncated…]\n\n${text.slice(-TAIL_CHARS)}`;
 }
 
-const URL_RE = /\bhttps?:\/\/[^\s<>"')\]]+|(?<![\w@.])www\.[\w.-]+\.[a-z]{2,}(?:\/[^\s<>"')\]]*)?/gi;
+const URL_RE =
+  /\bhttps?:\/\/[^\s<>"')\]]+|(?<![\w@.])www\.[\w.-]+\.[a-z]{2,}(?:\/[^\s<>"')\]]*)?/gi;
 const HANDLE_LINKEDIN_RE = /(?:linkedin\.com\/in\/|linkedin:\s*)([\w-]+)/i;
 const HANDLE_GITHUB_RE = /(?:github\.com\/|github:\s*)([\w-]+)/i;
 const HANDLE_TWITTER_RE = /(?:twitter\.com\/|x\.com\/|@)([\w]{2,15})\b/i;
@@ -149,8 +151,16 @@ function classifyLinks(text: string): {
     found.add(`https://twitter.com/${tw[1]}`);
   }
 
-  const out = { website: "", linkedin: "", github: "", portfolio: "", twitter: "", other: [] as string[] };
-  const portfolioHosts = /(behance|dribbble|figma|medium|dev\.to|hashnode|substack|notion\.site|read\.cv)/i;
+  const out = {
+    website: "",
+    linkedin: "",
+    github: "",
+    portfolio: "",
+    twitter: "",
+    other: [] as string[],
+  };
+  const portfolioHosts =
+    /(behance|dribbble|figma|medium|dev\.to|hashnode|substack|notion\.site|read\.cv)/i;
   const otherIgnore = /(gmail|yahoo|hotmail|outlook|protonmail)\.com$/i;
 
   for (const url of found) {
@@ -163,7 +173,11 @@ function classifyLinks(text: string): {
     if (otherIgnore.test(host)) continue;
     if (host.includes("linkedin.com")) {
       if (!out.linkedin) out.linkedin = url;
-    } else if (host.includes("github.com") || host.includes("gitlab.com") || host.includes("bitbucket.org")) {
+    } else if (
+      host.includes("github.com") ||
+      host.includes("gitlab.com") ||
+      host.includes("bitbucket.org")
+    ) {
       if (!out.github) out.github = url;
     } else if (host === "twitter.com" || host === "x.com") {
       if (!out.twitter) out.twitter = url;
@@ -185,7 +199,9 @@ function mergeLinks(parsed: ParsedResume, fromText: ReturnType<typeof classifyLi
   l.github ||= fromText.github;
   l.portfolio ||= fromText.portfolio;
   l.twitter ||= fromText.twitter;
-  const seen = new Set([l.website, l.linkedin, l.github, l.portfolio, l.twitter, ...l.other].filter(Boolean));
+  const seen = new Set(
+    [l.website, l.linkedin, l.github, l.portfolio, l.twitter, ...l.other].filter(Boolean),
+  );
   for (const u of fromText.other) {
     if (!seen.has(u)) {
       l.other.push(u);
@@ -210,13 +226,21 @@ function dedupeStringArray(arr: string[]): string[] {
 
 function postProcess(parsed: ParsedResume): ParsedResume {
   for (const cat of ["languages", "frameworks", "tools", "databases", "cloud", "soft"] as const) {
-    parsed.skills[cat] = dedupeStringArray(parsed.skills[cat]);
+    parsed.skills[cat] = dedupeStringArray(parsed.skills[cat]).filter((skill) =>
+      cat === "soft" ? true : !looksLikeRole(skill),
+    );
   }
   parsed.achievements = dedupeStringArray(parsed.achievements);
   parsed.awards = dedupeStringArray(parsed.awards);
   parsed.publications = dedupeStringArray(parsed.publications);
   parsed.languagesSpoken = dedupeStringArray(parsed.languagesSpoken);
   return parsed;
+}
+
+function looksLikeRole(value: string) {
+  return /\b(developer|engineer|analyst|manager|designer|editor|consultant|specialist|administrator|architect)\b/i.test(
+    value,
+  );
 }
 
 export async function parseResume(rawText: string): Promise<ParsedResume> {

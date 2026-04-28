@@ -59,7 +59,7 @@ export function KanbanBoard({ initial }: { initial: Card[] }) {
     return (
       <div className="rounded-[var(--radius-card)] border border-dashed border-[var(--color-border-strong)] bg-[var(--color-bg-subtle)] p-12 text-center">
         <p className="text-sm text-[var(--color-fg-muted)]">
-          No applications yet. Save jobs from the dashboard or detail page.
+          No applications yet. Save jobs from the jobs list or detail page.
         </p>
       </div>
     );

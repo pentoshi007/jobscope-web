@@ -1,5 +1,5 @@
 import type { JobDoc } from "@/models/job";
-import { type ResumeJobProfile, roleFitScore } from "../jobs/profile";
+import { type ResumeJobProfile, roleFitDetails } from "../jobs/profile";
 import { type ParsedResume, ParsedResumeSchema } from "../resume/schema";
 import { locationsMatch } from "./location";
 import { isAdjacent } from "./seniority";
@@ -101,6 +101,9 @@ export function score(
       ...safeResume.skills.tools,
       ...safeResume.skills.databases,
       ...safeResume.skills.cloud,
+      ...safeResume.jobSearchProfile.requiredSkills,
+      ...safeResume.jobSearchProfile.preferredSkills,
+      ...safeResume.jobSearchProfile.supportingSkills,
       ...safeResume.experience.flatMap((e) => e.skills ?? []),
       ...safeResume.projects.flatMap((p) => p.skills ?? []),
     ]
@@ -117,29 +120,32 @@ export function score(
   // Skills: weight matched count, but require a baseline of overlap to score high.
   // If job has no extracted skills, fall back to a moderate score so it isn't penalised to zero.
   let skillScore: number;
+  const skillCoverage = jobSkills.size === 0 ? 0 : matched.length / jobSkills.size;
   if (jobSkills.size === 0) {
-    skillScore = 18;
+    skillScore = 14;
   } else {
-    const coverage = matched.length / jobSkills.size;
-    const absolute = Math.min(matched.length, 6) / 6;
-    skillScore = Math.round((coverage * 0.65 + absolute * 0.35) * 40);
+    const absolute = Math.min(matched.length, 8) / 8;
+    skillScore = Math.round((skillCoverage * 0.7 + absolute * 0.3) * 42);
   }
 
-  // Title relevance: compare resume's recent role titles against the job title.
-  const role = resumeRoleSignal(safeResume);
-  const jobTitleTokens = tokenSet(job.title ?? "");
-  const titleOverlap = jaccardLite(role.titleTokens, jobTitleTokens);
-  // Bonus if any resume skill appears in job title (e.g. "React Engineer" + resume has react).
-  let skillInTitle = 0;
-  if (jobTitleTokens.size > 0) {
-    for (const s of resumeSkills) {
-      if (jobTitleTokens.has(s)) {
-        skillInTitle = 1;
-        break;
+  const fit = prefs.roleProfile ? roleFitDetails(prefs.roleProfile, job) : null;
+  let titleScore = fit?.roleScore ?? 0;
+  if (!fit) {
+    // Fallback for legacy data with no stored job-search profile.
+    const role = resumeRoleSignal(safeResume);
+    const jobTitleTokens = tokenSet(job.title ?? "");
+    const titleOverlap = jaccardLite(role.titleTokens, jobTitleTokens);
+    let skillInTitle = 0;
+    if (jobTitleTokens.size > 0) {
+      for (const s of resumeSkills) {
+        if (jobTitleTokens.has(s)) {
+          skillInTitle = 1;
+          break;
+        }
       }
     }
+    titleScore = Math.min(25, Math.round(titleOverlap * 18 + skillInTitle * 7));
   }
-  const titleScore = Math.round(titleOverlap * 18 + skillInTitle * 7);
 
   const seniorityScore =
     safeResume.inferredSeniority === job.seniority
@@ -171,13 +177,27 @@ export function score(
 
   const days = (Date.now() - new Date(job.postedAt).getTime()) / 86_400_000;
   const recencyScore = Math.max(0, 5 - days * 0.15);
-  const fitScore = prefs.roleProfile ? roleFitScore(prefs.roleProfile, job) : 0;
   const rawScore =
-    skillScore + titleScore + seniorityScore + locationScore + expScore + recencyScore + fitScore;
-  const finalScore = fitScore < 0 ? Math.min(29, Math.round(rawScore)) : Math.round(rawScore);
+    skillScore + titleScore + seniorityScore + locationScore + expScore + recencyScore;
+
+  let cap = 100;
+  if (fit) {
+    if (fit.avoidTitleMatch && !fit.strongTitleMatch) cap = Math.min(cap, 29);
+    else if (!fit.strongTitleMatch && fit.score < 18) cap = Math.min(cap, 42);
+    else if (fit.secondaryOnly) cap = Math.min(cap, 68);
+  }
+  if (jobSkills.size > 0) {
+    if (skillCoverage < 0.25) cap = Math.min(cap, 58);
+    else if (skillCoverage < 0.5) cap = Math.min(cap, 74);
+    if (missing.length > 0) cap = Math.min(cap, 92);
+    if (missing.length >= Math.max(1, matched.length)) cap = Math.min(cap, 78);
+  }
+  if (fit && !fit.strongTitleMatch && matched.length === 0) cap = Math.min(cap, 49);
+
+  const finalScore = Math.min(cap, Math.round(rawScore));
 
   return {
-    score: Math.max(0, finalScore),
+    score: Math.max(0, Math.min(100, finalScore)),
     breakdown: {
       skills: Math.round(skillScore),
       title: Math.round(titleScore),

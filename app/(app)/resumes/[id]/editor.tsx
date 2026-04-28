@@ -1,5 +1,5 @@
 "use client";
-import { ExternalLink, Plus, Star, Trash2, X } from "lucide-react";
+import { ExternalLink, Plus, Sparkles, Star, Target, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -31,8 +31,15 @@ export function ResumeEditor({
 
   function save() {
     startTransition(async () => {
-      await updateParsedResume(id, parsed as unknown as Record<string, unknown>);
-      toast.success("Saved");
+      const res = await updateParsedResume(id, parsed as unknown as Record<string, unknown>);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      setParsed((p) => ({ ...p, jobSearchProfile: res.profile }));
+      toast.success(isActive ? "Saved · matches refreshed" : "Saved · profile ready");
+      if (isActive) router.push("/jobs?refresh=1");
+      else router.refresh();
     });
   }
 
@@ -40,8 +47,8 @@ export function ResumeEditor({
     const willActivate = !isActive;
     startTransition(async () => {
       await toggleActiveResume(id);
-      toast.success(willActivate ? "Active · finding matches" : "Deactivated");
-      if (willActivate) router.push("/dashboard?refresh=1");
+      toast.success(willActivate ? "Active" : "Deactivated");
+      if (willActivate) router.push("/jobs?refresh=1");
       else router.refresh();
     });
   }
@@ -352,7 +359,7 @@ export function ResumeEditor({
         <Card>
           <CardContent className="space-y-3 p-5">
             <Button className="w-full" variant="accent" onClick={save} disabled={pending}>
-              Save changes
+              {isActive ? "Save and find jobs" : "Save changes"}
             </Button>
             <Button
               className="w-full"
@@ -370,6 +377,79 @@ export function ResumeEditor({
             </Button>
           </CardContent>
         </Card>
+
+        <JobSearchProfileCard parsed={parsed} />
+      </div>
+    </div>
+  );
+}
+
+function JobSearchProfileCard({ parsed }: { parsed: ParsedResume }) {
+  const profile = parsed.jobSearchProfile;
+  const hasProfile = !!profile.primaryRole;
+
+  return (
+    <Card>
+      <CardHeader className="p-5 pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Target className="h-4 w-4 text-[var(--color-accent)]" />
+          Job search profile
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 p-5 pt-0">
+        {hasProfile ? (
+          <>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
+                Primary role
+              </div>
+              <div className="mt-1 text-sm font-medium">{profile.primaryRole}</div>
+              {profile.source === "ai" && (
+                <Badge variant="accent" className="mt-2 gap-1">
+                  <Sparkles className="h-3 w-3" /> AI built
+                </Badge>
+              )}
+            </div>
+            {profile.targetTitles.length > 0 && (
+              <ProfilePills label="Targets" items={profile.targetTitles.slice(0, 5)} />
+            )}
+            {profile.requiredSkills.length > 0 && (
+              <ProfilePills label="Core skills" items={profile.requiredSkills.slice(0, 6)} mono />
+            )}
+            {profile.avoidTitles.length > 0 && (
+              <ProfilePills label="Filtered out" items={profile.avoidTitles.slice(0, 4)} />
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-[var(--color-fg-muted)]">
+            Save once after reviewing the extracted fields.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProfilePills({
+  label,
+  items,
+  mono = false,
+}: {
+  label: string;
+  items: string[];
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <div className="mb-1.5 text-xs font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
+        {label}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {items.map((item) => (
+          <Badge key={item} variant={mono ? "mono" : "outline"} className="text-[10px]">
+            {item}
+          </Badge>
+        ))}
       </div>
     </div>
   );

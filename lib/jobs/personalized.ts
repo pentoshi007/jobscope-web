@@ -8,6 +8,7 @@ import { inferSeniority, type NormalizedJob, stripHtml } from "./types";
 
 export interface PersonalizedQuery {
   keywords: string[];
+  searchQueries: string[];
   primaryRole: string;
   seniority: ParsedResume["inferredSeniority"];
   locations: string[];
@@ -21,6 +22,7 @@ export function buildPersonalizedQuery(
   if (resumes.length === 0) {
     return {
       keywords: ["software engineer"],
+      searchQueries: ["software engineer"],
       primaryRole: "software engineer",
       seniority: "mid",
       locations: preferredLocations,
@@ -28,37 +30,32 @@ export function buildPersonalizedQuery(
     };
   }
 
-  const skillCount = new Map<string, number>();
   let seniority: ParsedResume["inferredSeniority"] = "mid";
 
   for (const r of resumes) {
     seniority = r.inferredSeniority;
-    const top = [
-      ...r.skills.languages,
-      ...r.skills.frameworks,
-      ...r.skills.databases,
-      ...r.skills.cloud,
-      ...r.skills.tools,
-    ];
-    for (const s of top) {
-      const k = s.toLowerCase().trim();
-      if (!k) continue;
-      skillCount.set(k, (skillCount.get(k) ?? 0) + 1);
-    }
   }
-
-  const topSkills = [...skillCount.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([s]) => s);
 
   const profile = buildResumeJobProfile(resumes);
   const primaryRole = profile.queryRoles[0] ?? "software engineer";
+  const searchQueries = profile.queryRoles.length ? profile.queryRoles.slice(0, 5) : [primaryRole];
   const keywords = Array.from(
-    new Set([...profile.requiredTerms.slice(0, 4), ...topSkills.slice(0, 3), primaryRole]),
+    new Set([
+      ...searchQueries,
+      ...profile.requiredSkills.slice(0, 5),
+      ...profile.preferredSkills.slice(0, 4),
+      ...profile.requiredTerms.slice(0, 5),
+    ]),
   ).filter(Boolean);
 
-  return { keywords, primaryRole, seniority, locations: preferredLocations, profile };
+  return {
+    keywords,
+    searchQueries,
+    primaryRole,
+    seniority,
+    locations: preferredLocations,
+    profile,
+  };
 }
 
 interface JoobleJobRaw {
@@ -98,36 +95,41 @@ interface RemotiveJobRaw {
 
 async function fetchJoobleKeyword(query: PersonalizedQuery): Promise<NormalizedJob[]> {
   if (!env.JOOBLE_API_KEY) return [];
-  const keywords = query.keywords.join(" ");
+  const searchQueries = unique(query.searchQueries).slice(0, 2);
   const location = query.locations[0] ?? "";
+  const all: NormalizedJob[] = [];
   try {
-    const r = await fetch(`https://jooble.org/api/${env.JOOBLE_API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keywords, location, page: 1 }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!r.ok) return [];
-    const j = (await r.json()) as { jobs?: JoobleJobRaw[] };
-    return (j.jobs ?? [])
-      .filter((x) => x.id && x.title && x.link)
-      .map<NormalizedJob>((x) => ({
-        externalId: String(x.id),
-        source: "jooble",
-        title: x.title,
-        company: x.company || "Unknown",
-        location: x.location ?? "",
-        remote: /remote/i.test(x.location ?? "") || /remote/i.test(x.title),
-        workMode: /remote/i.test(x.location ?? "") ? "remote" : "onsite",
-        description: stripHtml(x.snippet ?? ""),
-        url: x.link,
-        postedAt: x.updated ? new Date(x.updated) : new Date(),
-        salary: { min: null, max: null, currency: null, period: null },
-        category: "",
-        tags: [],
-        seniority: inferSeniority(x.title),
-      }))
-      .filter((job) => jobMatchesProfile(query.profile, job));
+    for (const keywords of searchQueries) {
+      const r = await fetch(`https://jooble.org/api/${env.JOOBLE_API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keywords, location, page: 1 }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!r.ok) continue;
+      const j = (await r.json()) as { jobs?: JoobleJobRaw[] };
+      all.push(
+        ...(j.jobs ?? [])
+          .filter((x) => x.id && x.title && x.link)
+          .map<NormalizedJob>((x) => ({
+            externalId: String(x.id),
+            source: "jooble",
+            title: x.title,
+            company: x.company || "Unknown",
+            location: x.location ?? "",
+            remote: /remote/i.test(x.location ?? "") || /remote/i.test(x.title),
+            workMode: /remote/i.test(x.location ?? "") ? "remote" : "onsite",
+            description: stripHtml(x.snippet ?? ""),
+            url: x.link,
+            postedAt: x.updated ? new Date(x.updated) : new Date(),
+            salary: { min: null, max: null, currency: null, period: null },
+            category: "",
+            tags: [],
+            seniority: inferSeniority(x.title),
+          })),
+      );
+    }
+    return dedupeNormalized(all).filter((job) => jobMatchesProfile(query.profile, job));
   } catch {
     return [];
   }
@@ -135,7 +137,7 @@ async function fetchJoobleKeyword(query: PersonalizedQuery): Promise<NormalizedJ
 
 async function fetchAdzunaKeyword(query: PersonalizedQuery): Promise<NormalizedJob[]> {
   if (!env.ADZUNA_APP_ID || !env.ADZUNA_APP_KEY) return [];
-  const what = encodeURIComponent(query.keywords.join(" "));
+  const what = encodeURIComponent(query.searchQueries[0] ?? query.primaryRole);
   const country = guessAdzunaCountry(query.locations[0] ?? "");
   const ccy = country === "in" ? "INR" : country === "gb" ? "GBP" : "USD";
   try {
@@ -194,7 +196,9 @@ async function fetchRemotiveFiltered(query: PersonalizedQuery): Promise<Normaliz
     if (!r.ok) return [];
     const j = (await r.json()) as { jobs?: RemotiveJobRaw[] };
     const all = j.jobs ?? [];
-    const kw = query.keywords.map((k) => k.toLowerCase());
+    const kw = unique([...query.searchQueries, ...query.keywords.slice(0, 6)]).map((k) =>
+      k.toLowerCase(),
+    );
     const filtered = all.filter((x) => {
       const hay = `${x.title} ${x.tags?.join(" ") ?? ""} ${x.category}`.toLowerCase();
       return kw.some((k) => hay.includes(k));
@@ -222,6 +226,22 @@ async function fetchRemotiveFiltered(query: PersonalizedQuery): Promise<Normaliz
   }
 }
 
+function dedupeNormalized(jobs: NormalizedJob[]) {
+  const seen = new Set<string>();
+  const out: NormalizedJob[] = [];
+  for (const job of jobs) {
+    const key = `${job.source}:${job.externalId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(job);
+  }
+  return out;
+}
+
+function unique(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
 export type PersonalizedSource = "remotive" | "jooble" | "adzuna";
 
 export interface PersonalizedBatch {
@@ -236,7 +256,7 @@ export interface PersonalizedBatch {
  *
  * Free-tier strategy:
  *   - Remotive: unlimited; we filter the giant feed by keyword in-memory.
- *   - Jooble: 500 calls/day shared; one call per refresh.
+ *   - Jooble: 500 calls/day shared; at most two role-query calls per save/cron.
  *   - Adzuna: 250 calls/month shared; only when allowAdzuna is true (gate this externally).
  */
 export async function* streamPersonalizedJobs(

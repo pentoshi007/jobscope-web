@@ -71,6 +71,35 @@ const _CertificationSchema = new Schema(
   { _id: false },
 );
 
+const JobSearchRoleSchema = new Schema(
+  {
+    label: { type: String, default: "" },
+    priority: { type: Number, default: 0 },
+    reason: { type: String, default: "" },
+  },
+  { _id: false },
+);
+
+const JobSearchProfileSchema = new Schema(
+  {
+    primaryRole: { type: String, default: "" },
+    profileSummary: { type: String, default: "" },
+    roleFamilies: { type: [JobSearchRoleSchema], default: [] },
+    targetTitles: { type: [String], default: [] },
+    secondaryTitles: { type: [String], default: [] },
+    avoidTitles: { type: [String], default: [] },
+    requiredSkills: { type: [String], default: [] },
+    preferredSkills: { type: [String], default: [] },
+    supportingSkills: { type: [String], default: [] },
+    searchQueries: { type: [String], default: [] },
+    keywords: { type: [String], default: [] },
+    negativeKeywords: { type: [String], default: [] },
+    source: { type: String, enum: ["ai", "heuristic"], default: "heuristic" },
+    builtAt: { type: String, default: "" },
+  },
+  { _id: false },
+);
+
 const ParsedSchema = new Schema(
   {
     fullName: String,
@@ -91,6 +120,7 @@ const ParsedSchema = new Schema(
     languagesSpoken: { type: [String], default: [] },
     totalYearsExperience: { type: Number, default: 0 },
     inferredSeniority: { type: String, enum: ["junior", "mid", "senior", "staff"], default: "mid" },
+    jobSearchProfile: { type: JobSearchProfileSchema, default: () => ({}) },
   },
   { _id: false },
 );

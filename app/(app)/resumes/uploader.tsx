@@ -1,12 +1,12 @@
 "use client";
-import { useRef, useState, useTransition } from "react";
+import { Loader2, UploadCloud } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { UploadCloud, Loader2 } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { uploadResume } from "./actions";
 import { cn } from "@/lib/utils";
+import { uploadResume } from "./actions";
 
 export function ResumeUploader() {
   const router = useRouter();
@@ -25,8 +25,8 @@ export function ResumeUploader() {
         toast.error(res.error);
         return;
       }
-      toast.success("Resume parsed · finding matches");
-      router.push("/dashboard?refresh=1");
+      toast.success("Resume parsed. Review fields, then save to find jobs.");
+      router.push(`/resumes/${res.id}`);
     });
   }
 
@@ -56,7 +56,8 @@ export function ResumeUploader() {
           className="max-w-sm"
         />
       </div>
-      <div
+      <label
+        htmlFor="resume-file"
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -64,10 +65,11 @@ export function ResumeUploader() {
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
         className={cn(
-          "relative flex flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border-2 border-dashed p-10 text-center transition-colors",
+          "relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border-2 border-dashed p-10 text-center transition-colors",
           dragOver
             ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)]"
             : "border-[var(--color-border-strong)] bg-[var(--color-bg-subtle)]",
+          pending && "pointer-events-none opacity-70",
         )}
       >
         <div className="grid h-12 w-12 place-items-center rounded-full bg-[var(--color-card)] text-[var(--color-fg-muted)] shadow-sm">
@@ -83,23 +85,17 @@ export function ResumeUploader() {
           </p>
           <p className="mt-1 text-xs text-[var(--color-fg-subtle)]">Max 5MB · PII never logged</p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={pending}
-          onClick={() => inputRef.current?.click()}
-        >
-          Select file
-        </Button>
+        <span className={buttonVariants({ size: "sm", variant: "outline" })}>Select file</span>
         <input
+          id="resume-file"
           ref={inputRef}
           type="file"
           accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           className="hidden"
+          disabled={pending}
           onChange={onChange}
         />
-      </div>
+      </label>
     </div>
   );
 }

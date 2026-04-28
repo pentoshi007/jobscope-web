@@ -5,9 +5,11 @@ import { after } from "next/server";
 import { errorToLog, logAppEvent } from "@/lib/app-log";
 import { connectMongoose } from "@/lib/db";
 import { buildPersonalizedQuery, fetchAndStorePersonalizedJobs } from "@/lib/jobs/personalized";
+import { buildAiJobSearchProfile } from "@/lib/jobs/search-profile";
 import { deleteObject, putResume } from "@/lib/r2";
 import { extractText } from "@/lib/resume/extract";
 import { parseResume } from "@/lib/resume/parse";
+import { type JobSearchProfile, ParsedResumeSchema } from "@/lib/resume/schema";
 import { requireUserId } from "@/lib/session";
 import { Resume } from "@/models/resume";
 
@@ -19,6 +21,9 @@ const ALLOWED = new Set([
 const MAX_BYTES = 5 * 1024 * 1024;
 
 export type UploadResult = { ok: true; id: string } | { ok: false; error: string };
+export type UpdateResumeResult =
+  | { ok: true; profile: JobSearchProfile }
+  | { ok: false; error: string };
 
 export async function uploadResume(formData: FormData): Promise<UploadResult> {
   const userId = await requireUserId();
@@ -34,6 +39,34 @@ export async function uploadResume(formData: FormData): Promise<UploadResult> {
 
   await putResume(key, buf, file.type);
 
+  let rawText = "";
+  let parsed = ParsedResumeSchema.parse({});
+  try {
+    rawText = await extractText(buf, file.type);
+    if (rawText) parsed = await parseResume(rawText);
+  } catch (e) {
+    const details = errorToLog(e);
+    await logAppEvent({
+      kind: "resume",
+      source: rawText ? "resume.parse" : "resume.extract",
+      userId,
+      message: details.message,
+      stack: details.stack,
+      meta: { fileType: file.type, fileName: file.name },
+    });
+  }
+
+  if (!rawText) {
+    await logAppEvent({
+      level: "warn",
+      kind: "resume",
+      source: "resume.extract",
+      userId,
+      message: "Resume text extraction returned no content",
+      meta: { fileType: file.type, fileName: file.name },
+    });
+  }
+
   await connectMongoose();
   const existingActive = await Resume.exists({ userId, isActive: true, deletedAt: null });
   const doc = await Resume.create({
@@ -42,62 +75,14 @@ export async function uploadResume(formData: FormData): Promise<UploadResult> {
     fileKey: key,
     fileName: file.name,
     isActive: !existingActive,
-  });
-
-  after(async () => {
-    let rawText = "";
-    try {
-      rawText = await extractText(buf, file.type);
-    } catch (e) {
-      const details = errorToLog(e);
-      await logAppEvent({
-        kind: "resume",
-        source: "resume.extract",
-        userId,
-        message: details.message,
-        stack: details.stack,
-        meta: { fileType: file.type, fileName: file.name },
-      });
-    }
-
-    if (!rawText) {
-      await logAppEvent({
-        level: "warn",
-        kind: "resume",
-        source: "resume.extract",
-        userId,
-        message: "Resume text extraction returned no content",
-        meta: { fileType: file.type, fileName: file.name },
-      });
-      return;
-    }
-
-    try {
-      const parsed = await parseResume(rawText);
-      await connectMongoose();
-      await Resume.updateOne(
-        { _id: doc._id, userId },
-        { $set: { rawText, parsed, parsedAt: new Date() } },
-      );
-      await fetchAndStorePersonalizedJobs(buildPersonalizedQuery([parsed]), { allowAdzuna: true });
-      revalidatePath("/resumes");
-      revalidatePath(`/resumes/${String(doc._id)}`);
-      revalidatePath("/dashboard");
-    } catch (e) {
-      const details = errorToLog(e);
-      await logAppEvent({
-        kind: "resume",
-        source: "resume.parse",
-        userId,
-        message: details.message,
-        stack: details.stack,
-        meta: { fileName: file.name },
-      });
-    }
+    rawText,
+    parsed,
+    parsedAt: rawText ? new Date() : undefined,
   });
 
   revalidatePath("/resumes");
   revalidatePath("/dashboard");
+  revalidatePath("/jobs");
   return { ok: true, id: String(doc._id) };
 }
 
@@ -109,6 +94,7 @@ export async function toggleActiveResume(id: string) {
   await Resume.updateOne({ _id: id, userId }, { $set: { isActive: !doc.isActive } });
   revalidatePath("/resumes");
   revalidatePath("/dashboard");
+  revalidatePath("/jobs");
 }
 
 export async function deleteResume(id: string) {
@@ -132,12 +118,29 @@ export async function deleteResume(id: string) {
   });
   revalidatePath("/resumes");
   revalidatePath("/dashboard");
+  revalidatePath("/jobs");
 }
 
-export async function updateParsedResume(id: string, patch: Record<string, unknown>) {
+export async function updateParsedResume(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<UpdateResumeResult> {
   const userId = await requireUserId();
   await connectMongoose();
-  await Resume.updateOne({ _id: id, userId }, { $set: { parsed: patch, parsedAt: new Date() } });
+  const doc = await Resume.findOne({ _id: id, userId, deletedAt: null }).select({ rawText: 1 });
+  if (!doc) return { ok: false, error: "Resume not found" };
+
+  const parsed = ParsedResumeSchema.parse(patch);
+  const jobSearchProfile = await buildAiJobSearchProfile(parsed, doc.rawText ?? "");
+  const nextParsed = { ...parsed, jobSearchProfile };
+
+  await Resume.updateOne(
+    { _id: id, userId },
+    { $set: { parsed: nextParsed, parsedAt: new Date() } },
+  );
+  await fetchAndStorePersonalizedJobs(buildPersonalizedQuery([nextParsed]), { allowAdzuna: true });
   revalidatePath(`/resumes/${id}`);
   revalidatePath("/dashboard");
+  revalidatePath("/jobs");
+  return { ok: true, profile: jobSearchProfile };
 }

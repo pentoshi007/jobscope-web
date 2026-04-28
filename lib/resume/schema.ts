@@ -21,6 +21,48 @@ const CertificationSchema = z.preprocess(
   }),
 );
 
+export const JobSearchProfileSchema = z
+  .object({
+    primaryRole: z.string().default(""),
+    profileSummary: z.string().default(""),
+    roleFamilies: z
+      .array(
+        z.object({
+          label: z.string().default(""),
+          priority: z.number().min(0).max(100).default(0),
+          reason: z.string().default(""),
+        }),
+      )
+      .default([]),
+    targetTitles: z.array(z.string()).default([]),
+    secondaryTitles: z.array(z.string()).default([]),
+    avoidTitles: z.array(z.string()).default([]),
+    requiredSkills: z.array(z.string()).default([]),
+    preferredSkills: z.array(z.string()).default([]),
+    supportingSkills: z.array(z.string()).default([]),
+    searchQueries: z.array(z.string()).default([]),
+    keywords: z.array(z.string()).default([]),
+    negativeKeywords: z.array(z.string()).default([]),
+    source: z.enum(["ai", "heuristic"]).default("heuristic"),
+    builtAt: z.string().default(""),
+  })
+  .default({
+    primaryRole: "",
+    profileSummary: "",
+    roleFamilies: [],
+    targetTitles: [],
+    secondaryTitles: [],
+    avoidTitles: [],
+    requiredSkills: [],
+    preferredSkills: [],
+    supportingSkills: [],
+    searchQueries: [],
+    keywords: [],
+    negativeKeywords: [],
+    source: "heuristic",
+    builtAt: "",
+  });
+
 export const ParsedResumeSchema = z.object({
   fullName: z.string().default(""),
   email: z.string().default(""),
@@ -90,6 +132,8 @@ export const ParsedResumeSchema = z.object({
   languagesSpoken: z.array(z.string()).default([]),
   totalYearsExperience: z.number().default(0),
   inferredSeniority: z.enum(["junior", "mid", "senior", "staff"]).default("mid"),
+  jobSearchProfile: JobSearchProfileSchema,
 });
 
 export type ParsedResume = z.infer<typeof ParsedResumeSchema>;
+export type JobSearchProfile = z.infer<typeof JobSearchProfileSchema>;

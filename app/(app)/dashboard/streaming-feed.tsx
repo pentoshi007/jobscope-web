@@ -1,7 +1,7 @@
 "use client";
 import { Building2, Globe, Loader2, MapPin, RefreshCw, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScoreDonut } from "@/components/app/score-donut";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,7 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export function StreamingFeed() {
   const router = useRouter();
+  const pathname = usePathname();
   const sp = useSearchParams();
   const [jobs, setJobs] = useState<StreamJob[]>([]);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -160,12 +161,12 @@ export function StreamingFeed() {
     const next = new URLSearchParams(window.location.search);
     if (next.get("refresh")) {
       next.delete("refresh");
-      router.replace(`/dashboard${next.toString() ? `?${next.toString()}` : ""}`);
+      router.replace(`${pathname}${next.toString() ? `?${next.toString()}` : ""}`);
     }
     return () => {
       ctrlRef.current?.abort();
     };
-  }, [router, start]);
+  }, [pathname, router, start]);
 
   const isRunning =
     phase !== "done" && phase !== "idle" && phase !== "error" && phase !== "cooldown";

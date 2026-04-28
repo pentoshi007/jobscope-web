@@ -406,13 +406,18 @@ function topProfessionCounts(
   resumes: Array<{
     parsed?: {
       headline?: string | null;
+      jobSearchProfile?: { primaryRole?: string | null } | null;
       experience?: Array<{ role?: string | null }> | null;
     } | null;
   }>,
 ) {
   const counts = new Map<string, number>();
   for (const resume of resumes) {
-    const raw = resume.parsed?.headline || resume.parsed?.experience?.[0]?.role || "unknown";
+    const raw =
+      resume.parsed?.jobSearchProfile?.primaryRole ||
+      resume.parsed?.headline ||
+      resume.parsed?.experience?.[0]?.role ||
+      "unknown";
     const label = normalizeProfession(raw);
     if (!label || label === "unknown") continue;
     counts.set(label, (counts.get(label) ?? 0) + 1);
@@ -425,9 +430,12 @@ function topProfessionCounts(
 
 function normalizeProfession(raw: string) {
   const value = raw.toLowerCase();
+  if (/cyber|security|soc|incident|vulnerability/.test(value)) return "cybersecurity";
   if (/front[-\s]?end|react|vue|angular/.test(value)) return "frontend developer";
   if (/back[-\s]?end|node|java|python|api/.test(value)) return "backend developer";
   if (/full[-\s]?stack/.test(value)) return "full stack developer";
+  if (/finance|financial|accounting|audit/.test(value)) return "finance";
+  if (/video|editor|motion|premiere|after effects/.test(value)) return "video editing";
   if (/data|analytics|analyst/.test(value)) return "data";
   if (/machine learning|ml|ai/.test(value)) return "machine learning";
   if (/devops|sre|cloud|platform/.test(value)) return "devops";

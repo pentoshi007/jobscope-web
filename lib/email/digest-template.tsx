@@ -299,8 +299,8 @@ export function DigestEmail({
               margin: 0,
             }}
           >
-            <Link href={`${appUrl}/dashboard`} style={{ color: PALETTE.accent }}>
-              Open dashboard
+            <Link href={`${appUrl}/jobs`} style={{ color: PALETTE.accent }}>
+              Open jobs
             </Link>{" "}
             ·{" "}
             <Link href={`${appUrl}/settings/preferences`} style={{ color: PALETTE.subtle }}>

@@ -51,10 +51,10 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
       <Link
-        href="/dashboard"
+        href="/jobs"
         className="inline-flex items-center gap-1 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
       >
-        <ArrowLeft className="h-3 w-3" /> Back to dashboard
+        <ArrowLeft className="h-3 w-3" /> Back to jobs
       </Link>
 
       <div className="grid gap-6 lg:grid-cols-3">
