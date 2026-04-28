@@ -50,7 +50,7 @@ export async function setAdminSession(email: string) {
     httpOnly: true,
     sameSite: "lax",
     secure: env.NEXT_PUBLIC_APP_URL.startsWith("https://"),
-    path: "/admin",
+    path: "/",
     maxAge: 60 * 60 * 8,
   });
 }
