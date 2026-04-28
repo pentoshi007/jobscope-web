@@ -2,8 +2,12 @@ import { ObjectId } from "mongodb";
 import { errorToLog, logAppEvent } from "@/lib/app-log";
 import { connectMongoose, getDb } from "@/lib/db";
 import { loadRecentDigestJobs, sendUserDigestEmail } from "@/lib/email/send-user-digest";
+import { runApifyManual } from "@/lib/jobs/ingest/apify-linkedin";
+import { enrichForUpsert, bulkUpsertJobs } from "@/lib/jobs/ingest/runner";
 import { buildPersonalizedQuery, fetchAndStorePersonalizedJobs } from "@/lib/jobs/personalized";
 import { buildAiJobSearchProfile } from "@/lib/jobs/search-profile";
+import { recordSourceHealth } from "@/lib/jobs/source-health";
+import { LINKEDIN_APIFY_SOURCE } from "@/lib/jobs/source-constants";
 import { parsePrefs } from "@/lib/preferences";
 import { type ParsedResume, ParsedResumeSchema } from "@/lib/resume/schema";
 import { Resume } from "@/models/resume";
@@ -21,6 +25,7 @@ export type RefreshUserJobsResult = {
   userId: string;
   profilesCreated: number;
   personalized: Record<string, { fetched: number; upserted: number; error?: string }>;
+  apify: { fetched: number; upserted: number; error?: string };
   email: Awaited<ReturnType<typeof sendUserDigestEmail>>;
 };
 
@@ -34,10 +39,44 @@ export async function refreshJobsForUser(userId: string): Promise<RefreshUserJob
 
   const { parsedResumes, profilesCreated } = await ensureMissingAiProfiles(resumes);
   const prefs = parsePrefs(user.preferences);
-  const personalized = await fetchAndStorePersonalizedJobs(
-    buildPersonalizedQuery(parsedResumes, prefs.preferredLocations),
-    { allowAdzuna: true },
-  );
+  const pq = buildPersonalizedQuery(parsedResumes, prefs.preferredLocations);
+
+  // Fetch personalized jobs from cheap/keyword-friendly sources
+  const personalized = await fetchAndStorePersonalizedJobs(pq, { allowAdzuna: true });
+
+  // Also run Apify LinkedIn with user-specific search queries
+  let apify = { fetched: 0, upserted: 0, error: undefined as string | undefined };
+  try {
+    const apifyJobs = await runApifyManual({
+      roles: pq.searchQueries.slice(0, 4),
+      locations: [
+        ...(pq.locations.length > 0 ? pq.locations : []),
+        ...(parsedResumes[0]?.location ? [parsedResumes[0].location] : []),
+      ].slice(0, 3),
+    });
+    const docs = enrichForUpsert(apifyJobs, 84);
+    const upserted = await bulkUpsertJobs(docs);
+    apify = { fetched: apifyJobs.length, upserted, error: undefined };
+    await recordSourceHealth({
+      source: LINKEDIN_APIFY_SOURCE,
+      enabled: true,
+      fetched: apifyJobs.length,
+      normalized: docs.length,
+      upserted,
+    });
+  } catch (e) {
+    const details = errorToLog(e);
+    apify = { fetched: 0, upserted: 0, error: details.message };
+    await logAppEvent({
+      level: "warn",
+      kind: "job_source",
+      source: "admin.refresh-user.apify",
+      path: "/admin",
+      userId,
+      message: details.message,
+      stack: details.stack,
+    }).catch(() => {});
+  }
 
   const email = await sendUserDigestEmail({
     user,
@@ -47,7 +86,7 @@ export async function refreshJobsForUser(userId: string): Promise<RefreshUserJob
     minScore: 30,
   });
 
-  return { userId, profilesCreated, personalized, email };
+  return { userId, profilesCreated, personalized, apify, email };
 }
 
 async function loadUser(userId: string) {

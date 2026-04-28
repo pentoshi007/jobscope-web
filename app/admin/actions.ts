@@ -66,12 +66,15 @@ export async function refreshAdminUserJobs(formData: FormData) {
         (sum, stat) => sum + stat.upserted,
         0,
       );
+      const apifyMsg = result.apify.error
+        ? `LinkedIn: error (${result.apify.error.slice(0, 60)})`
+        : `LinkedIn: ${result.apify.fetched} fetched, ${result.apify.upserted} saved`;
       const emailMessage =
         result.email.status === "sent"
           ? `sent ${result.email.count} matches`
           : `email skipped (${result.email.reason})`;
       target = `/admin?refresh=ok&message=${encodeURIComponent(
-        `Created ${result.profilesCreated} AI profile(s), fetched ${fetched}, saved ${upserted}, ${emailMessage}.`,
+        `Created ${result.profilesCreated} AI profile(s), fetched ${fetched}, saved ${upserted}, ${apifyMsg}, ${emailMessage}.`,
       )}`;
     } catch (e) {
       const details = errorToLog(e);

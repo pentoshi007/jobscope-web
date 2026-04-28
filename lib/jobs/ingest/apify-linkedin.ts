@@ -7,23 +7,51 @@ import { inferSeniority, type NormalizedJob, stripHtml, type WorkMode } from "..
 import type { IngestContext, IngestSource } from "./runner";
 
 const DEFAULT_ACTOR_ID = "hKByXkMQaC5Qt9UMN";
-const DEFAULT_LINKEDIN_SEARCH_URL = "https://www.linkedin.com/jobs/search/?position=1&pageNum=0";
 const LINKEDIN_APIFY_COUNT = 100;
 const APIFY_TERMINAL_STATUSES = new Set(["SUCCEEDED", "FAILED", "TIMED-OUT", "ABORTED"]);
 /** Abandon run records older than 6 hours – the actor likely died silently. */
 const STALE_RUN_MS = 6 * 60 * 60 * 1000;
 
+// ─── LinkedIn search URL builder ─────────────────────────────────────
+
+/**
+ * Build targeted LinkedIn search URLs from user-profile data.
+ * The Apify actor accepts an array of `urls`; each URL is a LinkedIn
+ * job-search page with keywords and location pre-filled.
+ */
+export function buildLinkedInSearchUrls(
+  roles: string[],
+  locations: string[],
+): string[] {
+  const effectiveRoles = roles.length > 0 ? roles.slice(0, 5) : ["software engineer"];
+  const effectiveLocations = locations.length > 0 ? locations.slice(0, 3) : [""];
+
+  const urls: string[] = [];
+  const seen = new Set<string>();
+
+  for (const role of effectiveRoles) {
+    for (const loc of effectiveLocations) {
+      const params = new URLSearchParams({
+        keywords: role,
+        position: "1",
+        pageNum: "0",
+      });
+      if (loc) params.set("location", loc);
+      const url = `https://www.linkedin.com/jobs/search/?${params.toString()}`;
+      const key = `${role.toLowerCase()}::${loc.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      urls.push(url);
+    }
+  }
+
+  return urls.slice(0, 10); // cap to avoid excessive scraping
+}
+
 // ─── cron-safe source ────────────────────────────────────────────────
-// The LinkedIn Apify actor can take several minutes.  Rather than
-// blocking the cron function and aborting when the Vercel timeout hits,
-// we use a two-phase approach:
-//  Phase 1 – no pending run: start the actor (fire-and-forget) and
-//            persist the runId.  Return [] so other sources aren't
-//            blocked.
-//  Phase 2 – pending run found: poll once to see if the run finished.
-//            If SUCCEEDED → read dataset, upsert jobs, return them.
-//            If still running → return [].
-//            If failed → clean up, optionally start a new one.
+// Two-phase approach:
+//  Phase 1 – start the actor with user-derived search URLs, return []
+//  Phase 2 – next tick: if the run completed, read the dataset
 
 export const linkedinApifySource: IngestSource = {
   source: LINKEDIN_APIFY_SOURCE,
@@ -32,10 +60,6 @@ export const linkedinApifySource: IngestSource = {
   maxRunMs: 20_000,
   async fetchJobs(ctx) {
     if (!env.APIFY_API_TOKEN) return [];
-
-    // If we already have fresh jobs there's nothing to do.
-    const freshCache = await hasFreshLinkedInApifyJobs();
-    if (freshCache) return [];
 
     const actorId = actorPathId(env.APIFY_LINKEDIN_ACTOR_ID || DEFAULT_ACTOR_ID);
 
@@ -77,8 +101,12 @@ export const linkedinApifySource: IngestSource = {
       ],
     });
 
-    // ── Phase 1: fire-and-forget a new run ──────────────────────
-    const started = await startApifyActor(actorId);
+    // ── Phase 1: fire-and-forget with PERSONALIZED search URLs ──
+    const searchUrls = buildLinkedInSearchUrls(ctx.roles, [
+      ...ctx.cities,
+      ...ctx.countries,
+    ]);
+    const started = await startApifyActor(actorId, searchUrls);
     if (started.id) {
       await ApifyRun.create({
         runId: started.id,
@@ -95,14 +123,27 @@ export const linkedinApifySource: IngestSource = {
 };
 
 // ─── manual (admin) run – waits for completion ───────────────────────
-export async function runApifyManual(
-  onProgress?: (msg: string) => void,
-): Promise<NormalizedJob[]> {
+
+export interface ApifyManualOptions {
+  /** Search role/title queries from user profiles */
+  roles: string[];
+  /** Location names to filter by */
+  locations: string[];
+  /** Progress callback */
+  onProgress?: (msg: string) => void;
+}
+
+export async function runApifyManual(opts: ApifyManualOptions): Promise<NormalizedJob[]> {
   if (!env.APIFY_API_TOKEN) throw new Error("APIFY_API_TOKEN not configured");
+  const { roles, locations, onProgress } = opts;
   const actorId = actorPathId(env.APIFY_LINKEDIN_ACTOR_ID || DEFAULT_ACTOR_ID);
 
-  onProgress?.("Starting Apify LinkedIn actor…");
-  const started = await startApifyActor(actorId);
+  const searchUrls = buildLinkedInSearchUrls(roles, locations);
+  onProgress?.(
+    `Starting Apify actor with ${searchUrls.length} search URLs… (roles: ${roles.slice(0, 3).join(", ")})`,
+  );
+
+  const started = await startApifyActor(actorId, searchUrls);
   if (!started.id) throw new Error("Apify did not return a run ID");
 
   await ApifyRun.create({
@@ -144,7 +185,7 @@ export async function runApifyManual(
   await ApifyRun.updateOne({ runId: started.id }, { ingested: true });
 
   onProgress?.(`Got ${items.length} items. Normalizing…`);
-  const dummyCtx: IngestContext = { roles: [], countries: [], cities: [], deadlineAt: Infinity };
+  const dummyCtx: IngestContext = { roles, countries: [], cities: locations, deadlineAt: Infinity };
   return items
     .map((item) => normalizeLinkedInItem(item as LinkedInApifyItem, dummyCtx))
     .filter((job): job is NormalizedJob => Boolean(job));
@@ -162,7 +203,7 @@ interface ApifyRun {
  * Start the actor with waitForFinish=0 so the HTTP call returns
  * immediately with the run metadata.
  */
-async function startApifyActor(actorId: string): Promise<ApifyRun> {
+async function startApifyActor(actorId: string, searchUrls: string[]): Promise<ApifyRun> {
   const response = await apifyJson<ApifyRun | { data?: ApifyRun }>(
     `https://api.apify.com/v2/acts/${actorId}/runs?${apifyParams({
       waitForFinish: "0",
@@ -171,7 +212,7 @@ async function startApifyActor(actorId: string): Promise<ApifyRun> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        urls: [DEFAULT_LINKEDIN_SEARCH_URL],
+        urls: searchUrls,
         scrapeCompany: true,
         count: LINKEDIN_APIFY_COUNT,
         splitByLocation: false,
@@ -186,9 +227,9 @@ async function getApifyDatasetItems(datasetId: string) {
   const data = await apifyJson<LinkedInApifyItem[] | { items?: LinkedInApifyItem[] }>(
     `https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?${apifyParams({
       clean: "true",
-      limit: String(LINKEDIN_APIFY_COUNT),
+      limit: "1000",
     })}`,
-    { signal: AbortSignal.timeout(15_000) },
+    { signal: AbortSignal.timeout(30_000) },
   );
   return Array.isArray(data) ? data : (data.items ?? []);
 }

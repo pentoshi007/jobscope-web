@@ -3,7 +3,9 @@ import { errorToLog, logAppEvent } from "@/lib/app-log";
 import { connectMongoose, getDb } from "@/lib/db";
 import { loadRecentDigestJobs, sendUserDigestEmail } from "@/lib/email/send-user-digest";
 import { env } from "@/lib/env";
+import { buildPersonalizedQuery, fetchAndStorePersonalizedJobs } from "@/lib/jobs/personalized";
 import { parsePrefs } from "@/lib/preferences";
+import { ParsedResumeSchema } from "@/lib/resume/schema";
 import { Resume } from "@/models/resume";
 
 export const maxDuration = 60;
@@ -29,7 +31,44 @@ export async function GET(req: NextRequest) {
   let sent = 0;
   let skipped = 0;
   let failed = 0;
+  let personalizedFetched = 0;
 
+  // ── Fetch fresh personalized jobs for each user before sending ──
+  for (const u of users) {
+    const userId = String(u.id ?? u._id);
+    try {
+      const prefs = parsePrefs(u.preferences as string | undefined);
+      if (!prefs.alerts.dailyDigest || !u.email) continue;
+
+      const resumes = await Resume.find({ userId, isActive: true, deletedAt: null })
+        .select({ parsed: 1 })
+        .lean();
+      if (resumes.length === 0) continue;
+
+      const parsedResumes = resumes
+        .map((r) => ParsedResumeSchema.safeParse(r.parsed))
+        .filter((r) => r.success)
+        .map((r) => r.data);
+      if (parsedResumes.length === 0) continue;
+
+      const pq = buildPersonalizedQuery(parsedResumes, prefs.preferredLocations);
+      const result = await fetchAndStorePersonalizedJobs(pq, { allowAdzuna: false });
+      personalizedFetched += Object.values(result).reduce((s, v) => s + v.fetched, 0);
+    } catch (e) {
+      const details = errorToLog(e);
+      await logAppEvent({
+        level: "warn",
+        kind: "email",
+        source: "cron.send-alerts.prefetch",
+        path: "/api/cron/send-alerts",
+        userId,
+        message: details.message,
+        stack: details.stack,
+      });
+    }
+  }
+
+  // ── Now send digest emails with the freshly-updated pool ──────
   const recent = await loadRecentDigestJobs();
 
   await Promise.allSettled(
@@ -77,9 +116,12 @@ export async function GET(req: NextRequest) {
       source: "cron.send-alerts.summary",
       path: "/api/cron/send-alerts",
       message: `${failed} digest emails failed`,
-      meta: { sent, skipped, failed, totalUsers: users.length },
+      meta: { sent, skipped, failed, totalUsers: users.length, personalizedFetched },
     });
   }
 
-  return NextResponse.json({ ok: true, data: { sent, skipped, failed, totalUsers: users.length } });
+  return NextResponse.json({
+    ok: true,
+    data: { sent, skipped, failed, totalUsers: users.length, personalizedFetched },
+  });
 }
