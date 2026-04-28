@@ -1,4 +1,3 @@
-import { ApifyClient } from "apify-client";
 import { env } from "@/lib/env";
 import { LINKEDIN_APIFY_SOURCE, LINKEDIN_APIFY_TTL_MS } from "@/lib/jobs/source-constants";
 import { inferCountry } from "@/lib/match/location";
@@ -21,24 +20,13 @@ export const linkedinApifySource: IngestSource = {
     const freshCache = await hasFreshLinkedInApifyJobs();
     if (freshCache) return [];
 
-    const client = new ApifyClient({ token: env.APIFY_API_TOKEN });
     const waitSecs = Math.max(1, Math.floor((ctx.deadlineAt - Date.now()) / 1000));
-    const run = await client.actor(env.APIFY_LINKEDIN_ACTOR_ID || DEFAULT_ACTOR_ID).call(
-      {
-        urls: [DEFAULT_LINKEDIN_SEARCH_URL],
-        scrapeCompany: true,
-        count: LINKEDIN_APIFY_COUNT,
-        splitByLocation: false,
-      },
-      { waitSecs },
-    );
+    const actorId = actorPathId(env.APIFY_LINKEDIN_ACTOR_ID || DEFAULT_ACTOR_ID);
+    const run = await runApifyActor(actorId, waitSecs);
 
     if (typeof run.status === "string" && run.status !== "SUCCEEDED") {
       if (typeof run.id === "string") {
-        await client
-          .run(run.id)
-          .abort()
-          .catch(() => undefined);
+        await abortApifyRun(run.id);
       }
       throw new Error(`Apify LinkedIn actor ended with status ${run.status}`);
     }
@@ -46,15 +34,81 @@ export const linkedinApifySource: IngestSource = {
       throw new Error("Apify LinkedIn actor did not return a default dataset");
     }
 
-    const { items } = await client.dataset(run.defaultDatasetId).listItems({
-      limit: LINKEDIN_APIFY_COUNT,
-    });
+    const items = await getApifyDatasetItems(run.defaultDatasetId);
 
     return items
       .map((item) => normalizeLinkedInItem(item as LinkedInApifyItem, ctx))
       .filter((job): job is NormalizedJob => Boolean(job));
   },
 };
+
+interface ApifyRun {
+  id?: string;
+  status?: string;
+  defaultDatasetId?: string;
+}
+
+async function runApifyActor(actorId: string, waitSecs: number): Promise<ApifyRun> {
+  const response = await apifyJson<ApifyRun | { data?: ApifyRun }>(
+    `https://api.apify.com/v2/acts/${actorId}/runs?${apifyParams({
+      waitForFinish: String(waitSecs),
+    })}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        urls: [DEFAULT_LINKEDIN_SEARCH_URL],
+        scrapeCompany: true,
+        count: LINKEDIN_APIFY_COUNT,
+        splitByLocation: false,
+      }),
+      signal: AbortSignal.timeout(Math.max(1, waitSecs + 2) * 1000),
+    },
+  );
+  return unwrapApifyData(response);
+}
+
+async function getApifyDatasetItems(datasetId: string) {
+  const data = await apifyJson<LinkedInApifyItem[] | { items?: LinkedInApifyItem[] }>(
+    `https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?${apifyParams({
+      clean: "true",
+      limit: String(LINKEDIN_APIFY_COUNT),
+    })}`,
+    { signal: AbortSignal.timeout(15_000) },
+  );
+  return Array.isArray(data) ? data : (data.items ?? []);
+}
+
+async function abortApifyRun(runId: string) {
+  await apifyJson<ApifyRun | { data?: ApifyRun }>(
+    `https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}/abort?${apifyParams()}`,
+    { method: "POST", signal: AbortSignal.timeout(10_000) },
+  ).catch(() => undefined);
+}
+
+async function apifyJson<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    const details = await res.text().catch(() => "");
+    throw new Error(`Apify LinkedIn request failed: ${res.status} ${details.slice(0, 200)}`);
+  }
+  return (await res.json()) as T;
+}
+
+function apifyParams(extra: Record<string, string> = {}) {
+  return new URLSearchParams({ token: env.APIFY_API_TOKEN ?? "", ...extra }).toString();
+}
+
+function unwrapApifyData<T>(response: T | { data?: T }) {
+  if (response && typeof response === "object" && "data" in response && response.data) {
+    return response.data;
+  }
+  return response as T;
+}
+
+function actorPathId(actorId: string) {
+  return encodeURIComponent(actorId.replace(/\//g, "~"));
+}
 
 export async function hasFreshLinkedInApifyJobs(now = new Date()) {
   const fetchedAfter = new Date(now.getTime() - LINKEDIN_APIFY_TTL_MS);
