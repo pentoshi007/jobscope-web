@@ -36,14 +36,22 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const session = await requireSession();
   await connectMongoose();
-  const job = await Job.findById(id).lean();
-  if (!job) notFound();
 
-  const resumes = await Resume.find({
-    userId: session.user.id,
-    isActive: true,
-    deletedAt: null,
-  }).lean();
+  // Run all three DB queries in parallel instead of sequentially
+  const [job, resumes, application] = await Promise.all([
+    Job.findById(id).lean(),
+    Resume.find({
+      userId: session.user.id,
+      isActive: true,
+      deletedAt: null,
+    })
+      // Only select the fields needed for scoring — skip rawText, fileKey etc.
+      .select({ parsed: 1 })
+      .lean(),
+    Application.findOne({ userId: session.user.id, jobId: id }).lean(),
+  ]);
+
+  if (!job) notFound();
 
   // Score against all active resumes, pick the best match
   const matches = resumes.map((r) => {
@@ -54,14 +62,23 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
     matches.length > 0
       ? matches.reduce((a, b) => (a.score >= b.score ? a : b))
       : score(undefined as never, job as never);
-  const resume = resumes.length > 0 ? resumes[0] : null;
 
-  const application = await Application.findOne({ userId: session.user.id, jobId: job._id }).lean();
   const salary = formatSalary(
     job.salary?.min,
     job.salary?.max,
     job.salary?.currency,
     job.salary?.period,
+  );
+
+  // Categorise reasons
+  const warnings = m.reasons.filter(
+    (r) => r.includes("unavailable") || r.includes("may be filled") || r.includes("ago") || r.includes("mismatch"),
+  );
+  const positives = m.reasons.filter(
+    (r) => r.startsWith("Matches") || r === "Recently posted.",
+  );
+  const neutrals = m.reasons.filter(
+    (r) => !warnings.includes(r) && !positives.includes(r),
   );
 
   return (
@@ -121,7 +138,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
             </CardContent>
           </Card>
 
-          <AIHelpers jobId={String(job._id)} hasResume={!!resume} />
+          <AIHelpers jobId={String(job._id)} hasResume={resumes.length > 0} />
         </div>
 
         <div className="space-y-4">
@@ -130,9 +147,32 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
               <CardTitle className="text-base">Match breakdown</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {m.reasons.length > 0 && (
-                <div className="rounded-md border border-[var(--color-warning)] bg-[var(--color-warning-soft)] p-3 text-xs text-[var(--color-warning)]">
-                  {m.reasons[0]}
+              {(warnings.length > 0 || positives.length > 0 || neutrals.length > 0) && (
+                <div className="space-y-1.5">
+                  {warnings.map((r, i) => (
+                    <div
+                      key={`w-${i}`}
+                      className="rounded-md border border-[var(--color-warning)] bg-[var(--color-warning-soft)] p-2.5 text-xs text-[var(--color-warning)]"
+                    >
+                      ⚠ {r}
+                    </div>
+                  ))}
+                  {positives.map((r, i) => (
+                    <div
+                      key={`p-${i}`}
+                      className="rounded-md border border-[var(--color-success)] bg-[var(--color-success-soft,var(--color-bg-subtle))] p-2.5 text-xs text-[var(--color-success)]"
+                    >
+                      ✓ {r}
+                    </div>
+                  ))}
+                  {neutrals.map((r, i) => (
+                    <div
+                      key={`n-${i}`}
+                      className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-subtle)] p-2.5 text-xs text-[var(--color-fg-muted)]"
+                    >
+                      • {r}
+                    </div>
+                  ))}
                 </div>
               )}
               {Object.entries(m.breakdown).map(([k, v]) => (
@@ -142,7 +182,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
                   value={v}
                   max={
                     k === "skills"
-                      ? 40
+                      ? 42
                       : k === "title"
                         ? 25
                         : k === "seniority"
@@ -151,7 +191,7 @@ export default async function JobDetail({ params }: { params: Promise<{ id: stri
                             ? 10
                             : k === "experience"
                               ? 8
-                              : 5
+                              : 8
                   }
                 />
               ))}

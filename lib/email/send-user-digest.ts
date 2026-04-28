@@ -60,12 +60,13 @@ export type SendUserDigestResult =
 
 export async function loadRecentDigestJobs(hours = DEFAULT_RECENT_HOURS) {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+  const maxAge = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // exclude >90 day old jobs
   return (await Job.find({
-    postedAt: { $gte: since },
+    postedAt: { $gte: maxAge },
     $or: [{ cacheExpiresAt: { $gte: new Date() } }, { fetchedAt: { $gte: since } }],
   })
     .sort({ postedAt: -1 })
-    .limit(500)
+    .limit(300)
     .select({
       title: 1,
       company: 1,
@@ -76,7 +77,6 @@ export async function loadRecentDigestJobs(hours = DEFAULT_RECENT_HOURS) {
       url: 1,
       postedAt: 1,
       salary: 1,
-      description: 1,
       category: 1,
       tags: 1,
       extractedSkills: 1,
