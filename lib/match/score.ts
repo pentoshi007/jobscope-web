@@ -97,19 +97,21 @@ export function score(
   prefs: { preferredLocations?: string[]; roleProfile?: ResumeJobProfile } = {},
 ): MatchResult {
   const safeResume: ParsedResume = resume ?? ParsedResumeSchema.parse({});
+  const jsp = safeResume.jobSearchProfile ?? { requiredSkills: [], preferredSkills: [], supportingSkills: [] };
+  const sk = safeResume.skills ?? { languages: [], frameworks: [], tools: [], databases: [], cloud: [] };
 
   const resumeSkills = new Set(
     [
-      ...safeResume.skills.languages,
-      ...safeResume.skills.frameworks,
-      ...safeResume.skills.tools,
-      ...safeResume.skills.databases,
-      ...safeResume.skills.cloud,
-      ...safeResume.jobSearchProfile.requiredSkills,
-      ...safeResume.jobSearchProfile.preferredSkills,
-      ...safeResume.jobSearchProfile.supportingSkills,
-      ...safeResume.experience.flatMap((e) => e.skills ?? []),
-      ...safeResume.projects.flatMap((p) => p.skills ?? []),
+      ...(sk.languages ?? []),
+      ...(sk.frameworks ?? []),
+      ...(sk.tools ?? []),
+      ...(sk.databases ?? []),
+      ...(sk.cloud ?? []),
+      ...(jsp.requiredSkills ?? []),
+      ...(jsp.preferredSkills ?? []),
+      ...(jsp.supportingSkills ?? []),
+      ...(safeResume.experience ?? []).flatMap((e) => e.skills ?? []),
+      ...(safeResume.projects ?? []).flatMap((p) => p.skills ?? []),
     ]
       .map((s) => s.toLowerCase().trim())
       .filter(Boolean),
