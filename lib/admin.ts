@@ -56,7 +56,10 @@ export async function setAdminSession(email: string) {
 }
 
 export async function clearAdminSession() {
-  (await cookies()).delete(ADMIN_COOKIE);
+  const jar = await cookies();
+  // Delete at current path and the legacy "/admin" path so stale cookies are removed.
+  jar.delete({ name: ADMIN_COOKIE, path: "/" });
+  jar.delete({ name: ADMIN_COOKIE, path: "/admin" });
 }
 
 export async function requireAdminSession() {
