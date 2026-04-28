@@ -75,7 +75,6 @@ async function writeLog(input: AppLogInput) {
         status: input.status ?? null,
         stack: input.stack ?? "",
         firstSeenAt: now,
-        seen: false,
       },
       $set: {
         lastSeenAt: now,
