@@ -15,6 +15,14 @@ export default async function ResumesPage() {
   await connectMongoose();
   const resumes = await Resume.find({ userId: session.user.id, deletedAt: null })
     .sort({ createdAt: -1 })
+    .select({
+      name: 1,
+      isActive: 1,
+      createdAt: 1,
+      "parsed.fullName": 1,
+      "parsed.inferredSeniority": 1,
+      "parsed.totalYearsExperience": 1,
+    })
     .lean();
 
   return (
