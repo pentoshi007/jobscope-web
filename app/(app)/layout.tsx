@@ -10,7 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-dvh overflow-x-hidden">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 min-w-0 items-center justify-between gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg)] px-3 shadow-sm sm:gap-4 sm:px-6">
+        <header className="fixed inset-x-0 top-0 z-40 flex h-14 min-w-0 items-center justify-between gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg)] px-3 shadow-sm sm:gap-4 sm:px-6 md:left-56">
           <div className="flex min-w-0 items-center gap-2">
             <MobileNav />
             <div className="hidden min-w-0 truncate text-sm text-[var(--color-fg-muted)] min-[380px]:block">
@@ -25,7 +25,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <UserMenu user={session.user} />
           </div>
         </header>
-        <main className="min-w-0 flex-1">{children}</main>
+        <main className="min-w-0 flex-1 pt-14">{children}</main>
       </div>
     </div>
   );
