@@ -52,3 +52,7 @@ AGENTS.md
 .cursor/
 .gemini/
 .claude/
+
+# local-only docs & agent tooling (keep off remote)
+JOBSCOPE_SRS.md
+.clai/
